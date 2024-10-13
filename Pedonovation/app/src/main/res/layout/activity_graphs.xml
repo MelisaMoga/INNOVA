@@ -1,0 +1,113 @@
+<?xml version="1.0" encoding="utf-8"?>
+<androidx.constraintlayout.widget.ConstraintLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    tools:context=".AppActivities.GraphActivity">
+
+
+    <com.melisa.pedonovation.NoTouchScrollView
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:fadeScrollbars="false"
+        android:scrollbarSize="15dp"
+        android:scrollbarStyle="insideInset"
+        android:verticalScrollbarPosition="right">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:padding="18dp">
+
+            <!-- Capacitive Graphs -->
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_gravity="center_horizontal"
+                android:layout_marginTop="16dp"
+                android:text="Capacitive Data 'calcaneu'" />
+
+            <com.jjoe64.graphview.GraphView
+                android:id="@+id/graph_presure_1"
+                android:layout_width="match_parent"
+                android:layout_height="200dip"
+                android:layout_marginTop="48dp" />
+
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_gravity="center_horizontal"
+                android:layout_marginTop="16dp"
+                android:text="Capacitive Data 'tarsiana'" />
+
+            <com.jjoe64.graphview.GraphView
+                android:id="@+id/graph_presure_2"
+                android:layout_width="match_parent"
+                android:layout_height="200dip"
+                android:layout_marginTop="48dp" />
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_gravity="center_horizontal"
+                android:layout_marginTop="16dp"
+                android:text="Capacitive Data 'metatarsiana'" />
+
+            <com.jjoe64.graphview.GraphView
+                android:id="@+id/graph_presure_3"
+                android:layout_width="match_parent"
+                android:layout_height="200dip"
+                android:layout_marginTop="48dp" />
+
+
+
+            <!-- Accelerometer Graphs -->
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_gravity="center_horizontal"
+                android:layout_marginTop="16dp"
+                android:text="Accelerometer Data x-axis" />
+
+            <com.jjoe64.graphview.GraphView
+                android:id="@+id/graph_acc_1"
+                android:layout_width="match_parent"
+                android:layout_height="200dip"
+                android:layout_marginTop="25dp" />
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_gravity="center_horizontal"
+                android:layout_marginTop="16dp"
+                android:text="Accelerometer Data y-axis" />
+
+            <com.jjoe64.graphview.GraphView
+                android:id="@+id/graph_acc_2"
+                android:layout_width="match_parent"
+                android:layout_height="200dip"
+                android:layout_marginTop="25dp" />
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_gravity="center_horizontal"
+                android:layout_marginTop="16dp"
+                android:text="Accelerometer Data z-axis" />
+
+            <com.jjoe64.graphview.GraphView
+                android:id="@+id/graph_acc_3"
+                android:layout_width="match_parent"
+                android:layout_height="200dip"
+                android:layout_marginTop="25dp" />
+        </LinearLayout>
+    </com.melisa.pedonovation.NoTouchScrollView>
+
+
+    <!-- Back Button -->
+
+
+</androidx.constraintlayout.widget.ConstraintLayout>
