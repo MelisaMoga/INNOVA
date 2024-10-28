@@ -9,10 +9,7 @@ import android.util.Log;
 import android.util.Pair;
 
 
-import com.melisa.pedonovation.MessageHandlers.MessageHandler;
-import com.melisa.pedonovation.PedometricSole.PedometricData;
-import com.melisa.pedonovation.PedometricSole.PedometricHelper;
-import com.melisa.pedonovation.PedometricSole.SensorTypeData;
+//import com.melisa.pedonovation.MessageHandlers.MessageHandler;
 
 import java.io.IOException;
 import java.io.InputStream;
@@ -20,8 +17,6 @@ import java.io.OutputStream;
 import java.util.List;
 
 public class ConnectionThread extends Thread {
-    protected final PedometricHelper pedometricHelper;
-    protected PedometricData pedometricData;
     protected final BluetoothSocket socket;
     protected final BluetoothDevice device;
     private static final String TAG = "MY_APP_DEBUG_TAG";
@@ -33,11 +28,10 @@ public class ConnectionThread extends Thread {
 
     @SuppressLint("MissingPermission")
     public ConnectionThread(BluetoothDevice device, Handler handler) {
-        pedometricHelper = new PedometricHelper();
         this.handler = handler;
         this.device = device;
 
-        sendMessageToMainThread(MessageHandler.STATE_CONNECTING, "");
+        //sendMessageToMainThread(MessageHandler.STATE_CONNECTING, "");
 
         // Use a temporary object that is later assigned to mmSocket
         // because mmSocket is final.
@@ -60,12 +54,12 @@ public class ConnectionThread extends Thread {
             // Connect to the remote device through the socket. This call blocks
             // until it succeeds or throws an exception.
             socket.connect();
-            sendMessageToMainThread(MessageHandler.STATE_CONNECTED, "");
+            //sendMessageToMainThread(MessageHandler.STATE_CONNECTED, "");
 
             startReceiving();
         } catch (IOException connectException) {
             // Unable to connect; close the socket
-            sendMessageToMainThread(MessageHandler.STATE_CONNECTION_FAILED, "");
+            //sendMessageToMainThread(MessageHandler.STATE_CONNECTION_FAILED, "");
             cancel();
         }
     }
@@ -103,7 +97,7 @@ public class ConnectionThread extends Thread {
                 processReceivedData(receivedData);
             } catch (IOException e) {
                 Log.d(TAG, "Input stream was disconnected", e);
-                sendMessageToMainThread(MessageHandler.STATE_DISCONNECTED, ":(");
+                //sendMessageToMainThread(MessageHandler.STATE_DISCONNECTED, ":(");
                 break;
             }
         }
@@ -114,15 +108,15 @@ public class ConnectionThread extends Thread {
     }
 
     public void sendMessageToMainThread(int what, String data) {
-        BluetoothDeviceReceivedData bluetoothDeviceReceivedData = new BluetoothDeviceReceivedData(device, pedometricData, data);
-        Message message = handler.obtainMessage(what, bluetoothDeviceReceivedData);
-        handler.sendMessage(message);
+        //BluetoothDeviceReceivedData bluetoothDeviceReceivedData = new BluetoothDeviceReceivedData(device, pedometricData, data);
+     //   Message message = handler.obtainMessage(what, bluetoothDeviceReceivedData);
+        //handler.sendMessage(message);
     }
 
 
     private void processAndSend(String receivedData) {
 
-        List<String> lines = pedometricHelper.textToArrayList(receivedData);
+       /* List<String> lines = pedometricHelper.textToArrayList(receivedData);
         for (String line : lines) {
             Pair<SensorTypeData, SensorTypeData> result = pedometricHelper.processPedometricDataLine(line);
             SensorTypeData accData = result.first;
@@ -137,7 +131,7 @@ public class ConnectionThread extends Thread {
                 e.printStackTrace();
             }
         }
-
+*/
 
     }
 

@@ -6,9 +6,9 @@ import android.os.Handler;
 import android.os.Message;
 
 import com.melisa.pedonovation.Interfaces.ICurrentActivityManager;
-import com.melisa.pedonovation.BluetoothCore.BluetoothDeviceReceivedData;
+//import com.melisa.pedonovation.BluetoothCore.BluetoothDeviceReceivedData;
 
-public class MessageHandler implements Handler.Callback {
+/*public class MessageHandler implements Handler.Callback {
 
     private ICurrentActivityManager iCurrentActivityManager;
 
@@ -34,8 +34,8 @@ public class MessageHandler implements Handler.Callback {
     }
 
 
-    @SuppressLint({"SetTextI18n", "MissingPermission"})
-    @Override
+   @SuppressLint({"SetTextI18n", "MissingPermission"})
+   @Override
     public boolean handleMessage(Message msg) {
         // If there is no currentActivityManager set then do not handleMessage
         if (iCurrentActivityManager == null) {
@@ -84,4 +84,4 @@ public class MessageHandler implements Handler.Callback {
     }
 
 
-}
+}*/

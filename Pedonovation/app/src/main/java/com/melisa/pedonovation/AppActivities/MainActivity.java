@@ -7,22 +7,14 @@ import android.view.View;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.appcompat.app.AppCompatDelegate;
 
-import com.melisa.pedonovation.AppActivities.Managers.MainManager;
-import com.melisa.pedonovation.DEBUG_CLASS;
 import com.melisa.pedonovation.GlobalData;
 import com.melisa.pedonovation.databinding.ActivityMainBinding;
 
 public class MainActivity extends AppCompatActivity {
 
-    // Used to load the 'app' library on application startup.
-    static {
-        System.loadLibrary("app");
-    }
-
-
     // Binding object for accessing views in activity_main.xml
     public ActivityMainBinding binding;
-    private MainManager mainManager;
+
     private GlobalData globalData;
 
     @Override
@@ -37,11 +29,6 @@ public class MainActivity extends AppCompatActivity {
 
         globalData = ((GlobalData) this.getApplicationContext());
 
-        mainManager = new MainManager(this, globalData);
-
-        // DEBUG ONLY:
-        binding.editTextTextMultiLine.setOnClickListener(v -> new DEBUG_CLASS(this, globalData));
-
     }
 
 
@@ -52,21 +39,15 @@ public class MainActivity extends AppCompatActivity {
     }
 
 
-    // Launches the GraphActivity when called
-    public void LaunchGraphView(View view) {
-        Intent i = new Intent(this, GraphActivity.class);
-        startActivity(i);
-    }
-
     @Override
     protected void onResume() {
         super.onResume();
 
         // Change the manager to mainManager that handles the Thread messages
-        globalData.setActivityManagerForHandler(mainManager);
+       // globalData.setActivityManagerForHandler(mainManager);
 
         // Update Main UI elements
-        mainManager.updateUI();
+        //mainManager.updateUI();
     }
 
     public void startCommand(View view) {
@@ -75,18 +56,5 @@ public class MainActivity extends AppCompatActivity {
         globalData.connectionData2.connectionThread.write(startMsg.getBytes());
     }
 
-    public void startWrittingData(View view) {
-        // BUTTON IS ON
-        if (binding.toggleWriteData.isChecked()){
-            // Delete data files
-            mainManager.deleteDataFiles();
-            // set boolean 'shouldWriteToFile' to true in order to activate writing to file
-            mainManager.shouldWriteToFile = true;
-
-        } else {
-            // set boolean 'shouldWriteToFile' to false in order to stop writing to file
-            mainManager.shouldWriteToFile = false;
-        }
-    }
 }
 

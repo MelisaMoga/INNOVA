@@ -17,7 +17,7 @@ import android.widget.Toast;
 import androidx.appcompat.app.AlertDialog;
 
 import com.melisa.pedonovation.AppActivities.BtSettingsActivity;
-import com.melisa.pedonovation.BluetoothCore.BluetoothDeviceReceivedData;
+//import com.melisa.pedonovation.BluetoothCore.BluetoothDeviceReceivedData;
 import com.melisa.pedonovation.BluetoothCore.BluetoothHelper;
 import com.melisa.pedonovation.BluetoothCore.ConnectionData;
 import com.melisa.pedonovation.BluetoothCore.ConnectionThread;
@@ -237,7 +237,7 @@ public class BtSettingsManager implements UILogger, ICurrentActivityManager {
         mDeviceListAdapter = new DeviceListAdapter(activity, R.layout.device_adapter_view, devices, this);
         unconnectedLv.setAdapter(mDeviceListAdapter);
     }
-
+/*
     @Override
     public void handleAnyState(BluetoothDeviceReceivedData bluetoothDeviceReceivedData) {
         updateBluetoothUI();
@@ -280,4 +280,6 @@ public class BtSettingsManager implements UILogger, ICurrentActivityManager {
         BluetoothDevice bluetoothDevice = bluetoothDeviceReceivedData.device;
         log_and_toast(String.format("Device Disconnected %s", bluetoothDevice.getName()));
     }
+
+*/
 }

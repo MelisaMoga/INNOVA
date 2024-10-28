@@ -5,7 +5,7 @@ import android.os.Handler;
 
 import com.melisa.pedonovation.Interfaces.ICurrentActivityManager;
 import com.melisa.pedonovation.BluetoothCore.ConnectionData;
-import com.melisa.pedonovation.MessageHandlers.MessageHandler;
+//import com.melisa.pedonovation.MessageHandlers.MessageHandler;
 
 public class GlobalData extends Application {
 
@@ -19,7 +19,7 @@ public class GlobalData extends Application {
     }
 
     public void setActivityManagerForHandler(ICurrentActivityManager activityManager) {
-        messageHandler = new Handler(new MessageHandler(activityManager));
+       // messageHandler = new Handler(new MessageHandler(activityManager));
 
         if (isConnection1Alive()) {
             connectionData1.connectionThread.setHandler(messageHandler);
