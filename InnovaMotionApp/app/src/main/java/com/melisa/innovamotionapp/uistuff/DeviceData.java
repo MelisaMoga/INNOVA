@@ -1,0 +1,19 @@
+package com.melisa.innovamotionapp.uistuff;
+
+public class DeviceData {
+    private String name;
+    private String address;
+
+    public DeviceData(String name, String address) {
+        this.name = name;
+        this.address = address;
+    }
+
+    public String getName() {
+        return name;
+    }
+
+    public String getAddress() {
+        return address;
+    }
+}
