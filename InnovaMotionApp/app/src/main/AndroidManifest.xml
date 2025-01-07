@@ -26,11 +26,6 @@
             android:name=".BtSettingsActivity"
             android:exported="false"
             android:windowSoftInputMode="adjustNothing"/>
-
-        <activity
-            android:name=".MainActivity"
-            android:exported="false"
-            android:theme="@style/Theme.InnovaMotionApp" />
         <activity
             android:name=".ui.login.LoginActivity"
             android:exported="false"
@@ -38,6 +33,16 @@
         <activity
             android:name=".StartActivity"
             android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+        <activity
+            android:name=".MainActivity"
+            android:exported="true"
+            android:theme="@style/Theme.InnovaMotionApp">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
 
