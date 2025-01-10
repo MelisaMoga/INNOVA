@@ -1,4 +1,4 @@
-package com.melisa.innovamotionapp;
+package com.melisa.innovamotionapp.activities;
 
 import android.content.Intent;
 import android.os.Bundle;

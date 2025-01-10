@@ -1,4 +1,4 @@
-package com.melisa.innovamotionapp.ui.login;
+package com.melisa.innovamotionapp._login.login;
 
 /**
  * Class exposing authenticated user details to the UI.

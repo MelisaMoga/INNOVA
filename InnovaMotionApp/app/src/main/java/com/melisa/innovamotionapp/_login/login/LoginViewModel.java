@@ -1,4 +1,4 @@
-package com.melisa.innovamotionapp.ui.login;
+package com.melisa.innovamotionapp._login.login;
 
 import androidx.lifecycle.LiveData;
 import androidx.lifecycle.MutableLiveData;
@@ -6,9 +6,9 @@ import androidx.lifecycle.ViewModel;
 
 import android.util.Patterns;
 
-import com.melisa.innovamotionapp.data.LoginRepository;
-import com.melisa.innovamotionapp.data.Result;
-import com.melisa.innovamotionapp.data.model.LoggedInUser;
+import com.melisa.innovamotionapp._login.data.LoginRepository;
+import com.melisa.innovamotionapp._login.data.Result;
+import com.melisa.innovamotionapp._login.data.model.LoggedInUser;
 import com.melisa.innovamotionapp.R;
 
 public class LoginViewModel extends ViewModel {

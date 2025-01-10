@@ -5,8 +5,12 @@
     <string name="second_fragment_label">Second Fragment</string>
     <string name="next">Next</string>
     <string name="previous">Previous</string>
-    <string name="bt_start_connect_text">Conectare</string>
+    <string name="bt_start_to_connect_text">Conectare</string>
+    <string name="bt_start_to_enable_text">Porneste BT</string>
+    <string name="bt_enabling_text">Pornire BT…</string>
     <string name="bt_connecting_text">Conectare…</string>
+    <string name="bt_scanning_text">Scanare…</string>
+    <string name="bt_stopped_scan_text">Scanare</string>
 
     <string name="lorem_ipsum">
         Lorem ipsum dolor sit amet, consectetur adipiscing elit. Nam in scelerisque sem. Mauris

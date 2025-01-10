@@ -1,4 +1,4 @@
-package com.melisa.innovamotionapp.ui.login;
+package com.melisa.innovamotionapp._login.login;
 
 import android.app.Activity;
 
@@ -23,8 +23,6 @@ import android.widget.TextView;
 import android.widget.Toast;
 
 import com.melisa.innovamotionapp.R;
-import com.melisa.innovamotionapp.ui.login.LoginViewModel;
-import com.melisa.innovamotionapp.ui.login.LoginViewModelFactory;
 import com.melisa.innovamotionapp.databinding.ActivityLoginBinding;
 
 public class LoginActivity extends AppCompatActivity {

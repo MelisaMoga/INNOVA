@@ -1,4 +1,4 @@
-package com.melisa.innovamotionapp.uistuff;
+package com.melisa.innovamotionapp.ui.adapters;
 
 import android.annotation.SuppressLint;
 import android.bluetooth.BluetoothDevice;
@@ -10,25 +10,26 @@ import android.widget.ArrayAdapter;
 import android.widget.LinearLayout;
 import android.widget.TextView;
 
-import androidx.annotation.NonNull;
-import androidx.recyclerview.widget.RecyclerView;
-
-import com.melisa.innovamotionapp.GlobalData;
 import com.melisa.innovamotionapp.R;
+import com.melisa.innovamotionapp.uistuff.OnDeviceClickListener;
 
 import java.util.ArrayList;
-import java.util.List;
 
-public class DeviceDataUIAdapter extends ArrayAdapter<BluetoothDevice> {
+public class NearbyDeviceDataAdapter extends ArrayAdapter<BluetoothDevice> {
     private LayoutInflater mLayoutInflater;
     private ArrayList<BluetoothDevice> mDevices;
     private int mViewResourceId;
+    private OnDeviceClickListener onDeviceClickListener;
 
-    public DeviceDataUIAdapter(Context context, int tvResourceId, ArrayList<BluetoothDevice> devices) {
+    public NearbyDeviceDataAdapter(Context context, int tvResourceId, ArrayList<BluetoothDevice> devices) {
         super(context, tvResourceId, devices);
         this.mDevices = devices;
         mLayoutInflater = (LayoutInflater) context.getSystemService(Context.LAYOUT_INFLATER_SERVICE);
         mViewResourceId = tvResourceId;
+    }
+
+    public void setOnDeviceClickListener(OnDeviceClickListener onDeviceClickListener) {
+        this.onDeviceClickListener = onDeviceClickListener;
     }
 
     @SuppressLint("MissingPermission")
@@ -48,6 +49,12 @@ public class DeviceDataUIAdapter extends ArrayAdapter<BluetoothDevice> {
             if (deviceAddress != null) {
                 deviceAddress.setText(device.getAddress());
             }
+
+            scanDeviceContainer.setOnClickListener(v -> {
+                if (onDeviceClickListener != null) {
+                    onDeviceClickListener.onDeviceClick(device);
+                }
+            });
         }
 
         return convertView;

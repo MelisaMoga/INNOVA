@@ -1,6 +1,6 @@
-package com.melisa.innovamotionapp.data;
+package com.melisa.innovamotionapp._login.data;
 
-import com.melisa.innovamotionapp.data.model.LoggedInUser;
+import com.melisa.innovamotionapp._login.data.model.LoggedInUser;
 
 import java.io.IOException;
 

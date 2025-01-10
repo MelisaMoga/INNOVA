@@ -9,10 +9,13 @@
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
     <uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />
     <uses-permission android:name="android.permission.BLUETOOTH_SCAN" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
 
 
     <application
-        android:name=".GlobalData"
+        android:name=".utils.GlobalData"
         android:allowBackup="true"
         android:dataExtractionRules="@xml/data_extraction_rules"
         android:fullBackupContent="@xml/backup_rules"
@@ -23,15 +26,19 @@
         android:theme="@style/Theme.InnovaMotionApp"
         tools:targetApi="31">
         <activity
-            android:name=".BtSettingsActivity"
+            android:name=".activities.BtConnectedActivity"
             android:exported="false"
             android:windowSoftInputMode="adjustNothing"/>
         <activity
-            android:name=".ui.login.LoginActivity"
+            android:name=".activities.BtSettingsActivity"
+            android:exported="false"
+            android:windowSoftInputMode="adjustNothing"/>
+        <activity
+            android:name="._login.login.LoginActivity"
             android:exported="false"
             android:label="@string/title_activity_login" />
         <activity
-            android:name=".StartActivity"
+            android:name=".activities.StartActivity"
             android:exported="false">
 <!--            android:exported="true">-->
 <!--            <intent-filter>-->
@@ -41,7 +48,7 @@
 <!--            </intent-filter>-->
         </activity>
         <activity
-            android:name=".MainActivity"
+            android:name=".activities.MainActivity"
             android:exported="true"
             android:theme="@style/Theme.InnovaMotionApp">
             <intent-filter>
@@ -50,6 +57,10 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+        <service
+            android:name=".bluetooth.DeviceCommunicationService"
+            android:exported="false"
+            android:foregroundServiceType="dataSync" />
     </application>
 
 </manifest>

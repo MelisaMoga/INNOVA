@@ -1,11 +1,11 @@
-package com.melisa.innovamotionapp.ui.login;
+package com.melisa.innovamotionapp._login.login;
 
 import androidx.lifecycle.ViewModel;
 import androidx.lifecycle.ViewModelProvider;
 import androidx.annotation.NonNull;
 
-import com.melisa.innovamotionapp.data.LoginDataSource;
-import com.melisa.innovamotionapp.data.LoginRepository;
+import com.melisa.innovamotionapp._login.data.LoginDataSource;
+import com.melisa.innovamotionapp._login.data.LoginRepository;
 
 /**
  * ViewModel provider factory to instantiate LoginViewModel.

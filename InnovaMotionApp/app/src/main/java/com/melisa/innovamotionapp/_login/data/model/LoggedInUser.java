@@ -1,4 +1,4 @@
-package com.melisa.innovamotionapp.data.model;
+package com.melisa.innovamotionapp._login.data.model;
 
 /**
  * Data class that captures user information for logged in users retrieved from LoginRepository
