@@ -15,13 +15,17 @@ import android.util.Log;
 import androidx.core.app.NotificationCompat;
 
 import com.melisa.innovamotionapp.R;
+import com.melisa.innovamotionapp.data.posture.Posture;
+import com.melisa.innovamotionapp.data.PostureFactory;
 import com.melisa.innovamotionapp.utils.GlobalData;
 
 import java.io.File;
+import java.io.FileOutputStream;
 import java.io.IOException;
 
 public class DeviceCommunicationService extends Service {
     public static final String ACTION_BLUETOOTH_CONNECTED = "com.melisa.innovamotionapp.BLUETOOTH_CONNECTED";
+    private FileOutputStream fileOutputStream;
 
 
     @Override
@@ -87,10 +91,10 @@ public class DeviceCommunicationService extends Service {
 
         try {
             // Prepare the file to store data from the device
-            File outputFile = new File(getFilesDir(), device.getAddress() + "_data.txt");
+            fileOutputStream = new FileOutputStream(new File(getFilesDir(), device.getAddress() + "_data.txt"));
 
             // Create a new connection thread to connect to the Bluetooth device
-            deviceCommunicationThread = new DeviceCommunicationThread(device, outputFile, new DeviceCommunicationThread.DataCallback() {
+            deviceCommunicationThread = new DeviceCommunicationThread(device, new DeviceCommunicationThread.DataCallback() {
 
                 @Override
                 public void onConnectionEstablished() {
@@ -99,13 +103,29 @@ public class DeviceCommunicationService extends Service {
 
                 @Override
                 public void onDataReceived(String receivedData) {
-                    GlobalData.getInstance().setReceivedData(receivedData);  // Update LiveData with received data
                     Log.d(TAG, "[Service] MSG: " + receivedData);
+                    // Save receivedData into file
+                    try {
+                        fileOutputStream.write((receivedData + "\n").getBytes());
+                    } catch (IOException e) {
+                        Log.d(TAG, "ERROR closing input stream", e);
+                    }
+                    // Translate receivedData into Posture
+                    Posture posture = PostureFactory.createPosture(receivedData);
+
+                    // Update LiveData with received data
+                    GlobalData.getInstance().setReceivedPosture(posture);
                 }
 
                 @Override
                 public void onConnectionDisconnected() {
                     GlobalData.getInstance().setIsConnectedDevice(false);
+                    try {
+                        fileOutputStream.close();
+                    } catch (IOException e) {
+                        Log.d(TAG, "ERROR closing input stream", e);
+                    }
+//                    TODO: stop current service
                 }
             });
 

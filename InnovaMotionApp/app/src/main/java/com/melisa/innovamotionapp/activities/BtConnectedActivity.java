@@ -9,6 +9,9 @@ import android.widget.Toast;
 
 import androidx.appcompat.app.AppCompatActivity;
 
+import com.melisa.innovamotionapp.R;
+import com.melisa.innovamotionapp.data.posture.Posture;
+import com.melisa.innovamotionapp.data.posture.UnknownPosture;
 import com.melisa.innovamotionapp.databinding.BtConnectedActivityBinding;
 import com.melisa.innovamotionapp.utils.GlobalData;
 
@@ -25,13 +28,10 @@ public class BtConnectedActivity extends AppCompatActivity {
         binding = BtConnectedActivityBinding.inflate(getLayoutInflater());
         setContentView(binding.getRoot());
 
-        binding.ChildName.setText(globalData.childName);
+        binding.descriptionTextView.setText(globalData.childName);
 
         // Observe LiveData for device data
-        globalData.getReceivedData().observe(this, data -> {
-            // Update UI elements on the main thread
-            binding.editTextTextMultiLine.append(data + '\n');
-        });
+        globalData.getReceivedPosture().observe(this, this::displayPostureData);
 
         GlobalData.getInstance().getIsConnectedDevice().observe(this, isConnected -> {
             if (!isConnected) {
@@ -39,8 +39,26 @@ public class BtConnectedActivity extends AppCompatActivity {
                 finish();
             }
         });
+
     }
 
+    public void displayPostureData(Posture livePosture) {
+        String postureMessageWithName = getString(livePosture.getTextCode(), globalData.childName);
+        binding.descriptionTextView.setText(postureMessageWithName);
+
+        binding.riskValueTextView.setText(getString(livePosture.getRisc()));
+
+        if (livePosture instanceof UnknownPosture) {
+            // The posture is an instance of UnknownPosture
+            binding.videoView.stopPlayback(); // Stop any ongoing playback
+            binding.videoView.setVideoURI(null); // Clear the video content
+        } else {
+            // Handle other cases
+            String videoPath = "android.resource://" + getPackageName() + "/" + livePosture.getVideoCode();
+            binding.videoView.setVideoPath(videoPath);
+            binding.videoView.start(); // Start playing the video
+        }
+    }
 
     public void log(String msg) {
         Log.d(TAG, msg);

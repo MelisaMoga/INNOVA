@@ -8,6 +8,7 @@ import androidx.lifecycle.LiveData;
 import androidx.lifecycle.MutableLiveData;
 
 import com.melisa.innovamotionapp.bluetooth.DeviceCommunicationManager;
+import com.melisa.innovamotionapp.data.posture.Posture;
 
 public class GlobalData extends Application {
     private static GlobalData instance;
@@ -25,18 +26,18 @@ public class GlobalData extends Application {
 
     public ArraySet<BluetoothDevice> nearbyBtDevices = new ArraySet<>();
 
-    private final MutableLiveData<String> receivedData = new MutableLiveData<>();
+    private final MutableLiveData<Posture> receivedPosture = new MutableLiveData<>();
     private final MutableLiveData<Boolean> isConnectedDevice = new MutableLiveData<>();
 
     public MutableLiveData<Boolean> getIsConnectedDevice() {
         return isConnectedDevice;
     }
-    public LiveData<String> getReceivedData() {
-        return receivedData;
+    public LiveData<Posture> getReceivedPosture() {
+        return receivedPosture;
     }
 
-    public void setReceivedData(String data) {
-        receivedData.postValue(data);
+    public void setReceivedPosture(Posture receivedPosture) {
+        this.receivedPosture.postValue(receivedPosture);
     }
     public void setIsConnectedDevice(boolean connectionEstablished) {
         isConnectedDevice.postValue(connectionEstablished);

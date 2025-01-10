@@ -12,6 +12,28 @@
     <string name="bt_scanning_text">Scanare…</string>
     <string name="bt_stopped_scan_text">Scanare</string>
 
+    <!--  Posture formatted messages  -->
+    <!--  UnusedFootwearPosture  -->
+    <string name="posture_unused_footwear_msg">Papucii il asteapta pe %1$s …</string>
+    <string name="posture_unused_footwear_risk">Unknown</string>
+    <!--  StandingPosture  -->
+    <string name="posture_standing_msg">%1$s sta in picioare</string>
+    <string name="posture_standing_risk">Unknown</string>
+    <!--  WalkingPosture  -->
+    <string name="posture_walking_msg">%1$s merge …</string>
+    <string name="posture_walking_risk">Unknown</string>
+    <!--  SittingPosture  -->
+    <string name="posture_sitting_msg">%1$s sta pe scaun</string>
+    <string name="posture_sitting_risk">minim</string>
+    <!--  FallingPosture  -->
+    <string name="posture_falling_msg">%1$s a cazut!!!</string>
+    <string name="posture_falling_risk">Unknown</string>
+    <!--  UnknownPosture  -->
+    <string name="posture_unknown_msg">Unknown posture</string>
+    <string name="posture_unknown_risk">Unknown</string>
+
+
+
     <string name="lorem_ipsum">
         Lorem ipsum dolor sit amet, consectetur adipiscing elit. Nam in scelerisque sem. Mauris
         volutpat, dolor id interdum ullamcorper, risus dolor egestas lectus, sit amet mattis purus

@@ -8,7 +8,6 @@ import android.content.ServiceConnection;
 import android.os.IBinder;
 
 import androidx.core.content.ContextCompat;
-import androidx.lifecycle.MutableLiveData;
 
 public class DeviceCommunicationManager {
     private final Context context;

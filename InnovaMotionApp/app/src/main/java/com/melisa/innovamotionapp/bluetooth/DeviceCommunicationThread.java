@@ -15,8 +15,6 @@ public class DeviceCommunicationThread extends Thread {
     private final BluetoothDevice device;
     private final BluetoothSocket socket;
     private final InputStream inputStream;
-    private final FileOutputStream fileOutputStream;
-    private boolean isRunning = true;
     private final DataCallback callback;
 
     public BluetoothDevice getDevice() {
@@ -33,11 +31,10 @@ public class DeviceCommunicationThread extends Thread {
     public static UUID APP_UUID = UUID.fromString("00001101-0000-1000-8000-00805F9B34FB");
 
     @SuppressLint("MissingPermission")
-    public DeviceCommunicationThread(BluetoothDevice device, File outputFile, DataCallback callback) throws IOException {
+    public DeviceCommunicationThread(BluetoothDevice device, DataCallback callback) throws IOException {
         this.device = device;
         this.socket = device.createRfcommSocketToServiceRecord(APP_UUID);
         this.inputStream = socket.getInputStream();
-        this.fileOutputStream = new FileOutputStream(outputFile);
         this.callback = callback;
 
 //        sendMessageToMainThread(MessageHandler.STATE_CONNECTING, "");
@@ -70,8 +67,9 @@ public class DeviceCommunicationThread extends Thread {
                 bytes = inputStream.read(receiveBuffer);
                 String receivedData = new String(receiveBuffer, 0, bytes);
 
-                // Process received data
-                processReceivedData(receivedData);
+                // Notify callback
+                Log.d(TAG, "[Thread] MSG: " + receivedData);
+                callback.onDataReceived(receivedData);
             } catch (IOException e) {
                 Log.d(TAG, "Input stream was disconnected", e);
 //                sendMessageToMainThread(MessageHandler.STATE_DISCONNECTED, ":(");
@@ -79,14 +77,6 @@ public class DeviceCommunicationThread extends Thread {
                 break;
             }
         }
-    }
-
-    private void processReceivedData(String receivedData) throws IOException {
-        // Write to file and notify callback
-        fileOutputStream.write((receivedData + "\n").getBytes());
-        callback.onDataReceived(receivedData);
-
-        Log.d(TAG, "[Thread] MSG: " + receivedData);
     }
 
 
@@ -106,7 +96,6 @@ public class DeviceCommunicationThread extends Thread {
     public void cancel() {
         try {
             socket.close();
-            fileOutputStream.close();
             callback.onConnectionDisconnected();
         } catch (IOException e) {
             Log.e(TAG, "Could not close the client socket", e);
