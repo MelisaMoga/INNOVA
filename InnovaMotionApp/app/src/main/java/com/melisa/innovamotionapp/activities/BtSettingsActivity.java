@@ -15,7 +15,6 @@ import android.text.Editable;
 import android.text.TextWatcher;
 import android.util.Log;
 import android.view.View;
-import android.widget.EditText;
 import android.widget.Toast;
 
 import androidx.activity.result.ActivityResult;
@@ -38,6 +37,8 @@ public class BtSettingsActivity extends AppCompatActivity {
     private final ActivityResultLauncher<Intent> enableBluetoothLauncher = registerForActivityResult(
             new ActivityResultContracts.StartActivityForResult(), this::processEnableBluetoothResponse);
 
+
+
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
@@ -47,12 +48,44 @@ public class BtSettingsActivity extends AppCompatActivity {
         // Initialize ViewModel
         viewModel = new ViewModelProvider(this).get(BtSettingsViewModel.class);
 
+
         // Observe LiveData from ViewModel
-        observeViewModel();
+        setupObservers();
+        setupUIListeners();
+
+        viewModel.checkBluetoothState();
+        updateUI(BtSettingsState.BEFORE_BTN_PRESSED);
+    }
+
+    private void setupObservers() {
+        // Observe Bluetooth UI state
+        viewModel.getUIState().observe(this, this::updateUI);
+
+        // Observe nearby devices
+        viewModel.getNearbyDevices().observe(this, devices -> {
+            String userName = binding.inputChildName.getText().toString();
+
+            String lastDeviceAddress = GlobalData.getInstance().userDeviceSettingsStorage.getLatestDeviceAddress();
+            viewModel.tryReconnectToLastDevice(lastDeviceAddress, userName);
+
+            // Display nearby devices
+            NearbyDeviceDataAdapter adapter = new NearbyDeviceDataAdapter(
+                    this,
+                    R.layout.nearby_device_layout,
+                    devices
+            );
+            adapter.setOnDeviceClickListener(device -> {
+                viewModel.connectToDevice(device, userName);
+            });
+            binding.deviceListRecyclerView.setAdapter(adapter);
+        });
 
         GlobalData.getInstance().getIsConnectedDevice().observe(this, isConnected -> {
 
             if (isConnected) {
+                String deviceConnected = GlobalData.getInstance().deviceCommunicationManager.getDeviceToConnect().getAddress();
+                GlobalData.getInstance().userDeviceSettingsStorage.saveLatestDeviceAddress(deviceConnected);
+
                 // Navigate to the next screen or update UI
                 launchBtConnectedActivity();
             } else {
@@ -60,16 +93,12 @@ public class BtSettingsActivity extends AppCompatActivity {
                 Log.d("ServiceState", "Service is disconnected.");
             }
         });
+    }
 
-        viewModel.checkBluetoothState();
-        updateUI(BtSettingsState.BEFORE_BTN_PRESSED);
 
-        // Button click logic
-        binding.btConnection.setOnClickListener(this::onStartBtnClicked);
-
-        // Text input logic
-        EditText inputChildName = binding.inputChildName;
-        inputChildName.addTextChangedListener(new TextWatcher() {
+    private void setupUIListeners() {
+        // UserName text input logic
+        binding.inputChildName.addTextChangedListener(new TextWatcher() {
             @Override
             public void beforeTextChanged(CharSequence s, int start, int count, int after) {
                 // Not needed
@@ -88,35 +117,17 @@ public class BtSettingsActivity extends AppCompatActivity {
                 // Not needed
             }
         });
+
+        // Button click logic
+        binding.btConnection.setOnClickListener(this::onStartBtnClicked);
     }
-
-    private void observeViewModel() {
-        // Observe UI state
-        viewModel.getUIState().observe(this, this::updateUI);
-
-        // Observe nearby devices
-        viewModel.getNearbyDevices().observe(this, devices -> {
-            NearbyDeviceDataAdapter adapter = new NearbyDeviceDataAdapter(this, R.layout.nearby_device_layout, devices);
-
-            // Handle nearby device clicks
-            adapter.setOnDeviceClickListener(device -> {
-                String childName = binding.inputChildName.getText().toString();
-                viewModel.connectToDevice(device, childName);
-            });
-            binding.deviceListRecyclerView.setAdapter(adapter);
-        });
-
-        viewModel.getNeedRequestBluetoothEnable().observe(this, needRequestBluetoothEnable -> {
-        });
-    }
-
-
 
     private void updateUI(BtSettingsState state) {
         switch (state) {
             case BEFORE_BTN_PRESSED: // On activity initialisation
                 binding.inputChildName.setEnabled(true);
                 binding.btConnection.setEnabled(false);
+                binding.inputChildName.setText(GlobalData.getInstance().userDeviceSettingsStorage.getLatestUser());
                 break;
 
             case AFTER_BTN_PRESSED:
@@ -160,6 +171,7 @@ public class BtSettingsActivity extends AppCompatActivity {
 
     private void onStartBtnClicked(View view) {
         updateUI(BtSettingsState.AFTER_BTN_PRESSED);
+
         boolean requirePermissions = doesNeedRequestPermission(new String[]{Manifest.permission.BLUETOOTH_SCAN, Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION, Manifest.permission.BLUETOOTH_CONNECT});
         if (requirePermissions) {
             // Safe return in case permissions are not allowed.

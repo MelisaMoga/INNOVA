@@ -9,7 +9,6 @@ import android.widget.Toast;
 
 import androidx.appcompat.app.AppCompatActivity;
 
-import com.melisa.innovamotionapp.R;
 import com.melisa.innovamotionapp.data.posture.Posture;
 import com.melisa.innovamotionapp.data.posture.UnknownPosture;
 import com.melisa.innovamotionapp.databinding.BtConnectedActivityBinding;
@@ -28,7 +27,7 @@ public class BtConnectedActivity extends AppCompatActivity {
         binding = BtConnectedActivityBinding.inflate(getLayoutInflater());
         setContentView(binding.getRoot());
 
-        binding.descriptionTextView.setText(globalData.childName);
+        binding.descriptionTextView.setText(globalData.userName);
 
         // Observe LiveData for device data
         globalData.getReceivedPosture().observe(this, this::displayPostureData);
@@ -43,7 +42,7 @@ public class BtConnectedActivity extends AppCompatActivity {
     }
 
     public void displayPostureData(Posture livePosture) {
-        String postureMessageWithName = getString(livePosture.getTextCode(), globalData.childName);
+        String postureMessageWithName = getString(livePosture.getTextCode(), globalData.userName);
         binding.descriptionTextView.setText(postureMessageWithName);
 
         binding.riskValueTextView.setText(getString(livePosture.getRisc()));

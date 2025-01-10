@@ -24,7 +24,6 @@ import java.io.FileOutputStream;
 import java.io.IOException;
 
 public class DeviceCommunicationService extends Service {
-    public static final String ACTION_BLUETOOTH_CONNECTED = "com.melisa.innovamotionapp.BLUETOOTH_CONNECTED";
     private FileOutputStream fileOutputStream;
 
 
@@ -41,6 +40,8 @@ public class DeviceCommunicationService extends Service {
     private DeviceCommunicationThread deviceCommunicationThread; // The connection thread that handles communication with a device
     private static final int NOTIFICATION_ID = 1;
     private static final String CHANNEL_ID = "bluetooth_service_channel";
+    private int attemptToReconnectCounter = 0;
+    private final int MAX_NUM_CONNECTING_CONSECUTIVE_ATTEMPTS = 2;
 
     @Override
     public int onStartCommand(Intent intent, int flags, int startId) {
@@ -85,9 +86,7 @@ public class DeviceCommunicationService extends Service {
      */
     public void connectToDevice(BluetoothDevice device) {
         // If a device is already connected, cancel the previous thread
-        if (deviceCommunicationThread != null && deviceCommunicationThread.isAlive()) {
-            deviceCommunicationThread.cancel();
-        }
+        disconnectDevice();
 
         try {
             // Prepare the file to store data from the device
@@ -99,6 +98,20 @@ public class DeviceCommunicationService extends Service {
                 @Override
                 public void onConnectionEstablished() {
                     GlobalData.getInstance().setIsConnectedDevice(true);
+
+                    // Reset consecutive attempts
+                    attemptToReconnectCounter = 0;
+
+                    // Update the foreground notification to indicate the device is connected
+                    Notification notification = new NotificationCompat.Builder(DeviceCommunicationService.this, CHANNEL_ID)
+                            .setContentTitle("Bluetooth Device Connected")
+                            .setContentText("Communication with your device is ongoing.")
+                            .setSmallIcon(R.drawable.baseline_bluetooth_connected_24)
+                            .setPriority(NotificationCompat.PRIORITY_LOW)
+                            .build();
+
+                    NotificationManager manager = (NotificationManager) getSystemService(NOTIFICATION_SERVICE);
+                    manager.notify(NOTIFICATION_ID+1, notification);
                 }
 
                 @Override
@@ -125,7 +138,29 @@ public class DeviceCommunicationService extends Service {
                     } catch (IOException e) {
                         Log.d(TAG, "ERROR closing input stream", e);
                     }
-//                    TODO: stop current service
+
+                    // Send notification on disconnect
+                    NotificationManager manager = (NotificationManager) getSystemService(NOTIFICATION_SERVICE);
+                    Notification notification = new NotificationCompat.Builder(DeviceCommunicationService.this, CHANNEL_ID)
+                            .setContentTitle("Bluetooth Device Disconnected")
+                            .setContentText("Your Bluetooth device has been disconnected.")
+                            .setSmallIcon(R.drawable.baseline_bluetooth_disabled_24)
+                            .setPriority(NotificationCompat.PRIORITY_HIGH)
+                            .build();
+                    manager.notify(NOTIFICATION_ID + 1, notification);
+
+
+                    if (attemptToReconnectCounter >= MAX_NUM_CONNECTING_CONSECUTIVE_ATTEMPTS) {
+                        // Stop current service
+                        GlobalData.getInstance().deviceCommunicationManager.stopService();
+                        stopForeground(true);
+                        stopSelf();
+                    } else {
+                        attemptToReconnectCounter += 1;
+                        BluetoothDevice deviceToConnect = GlobalData.getInstance().deviceCommunicationManager.getDeviceToConnect();
+                        connectToDevice(deviceToConnect);
+                    }
+
                 }
             });
 
@@ -141,7 +176,9 @@ public class DeviceCommunicationService extends Service {
      */
     public void disconnectDevice() {
         if (deviceCommunicationThread != null) {
-            deviceCommunicationThread.cancel();
+            if (isDeviceConnected()) {
+                deviceCommunicationThread.interrupt();
+            }
             deviceCommunicationThread = null;
         }
     }

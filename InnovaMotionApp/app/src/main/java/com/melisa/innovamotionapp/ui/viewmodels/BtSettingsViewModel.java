@@ -138,9 +138,11 @@ public class BtSettingsViewModel extends ViewModel {
     }
 
     @SuppressLint("MissingPermission")
-    public void connectToDevice(BluetoothDevice device, String childName) {
+    public void connectToDevice(BluetoothDevice device, String userName) {
         isConnecting = true;
-        globalData.childName = childName;
+        globalData.userName = userName;
+        GlobalData.getInstance().userDeviceSettingsStorage.saveLatestUser(userName);
+
         uiState.setValue(BtSettingsState.CONNECTING);
         // Cancel discovery because it otherwise slows down the connection.
         this.mBluetoothAdapter.cancelDiscovery();
@@ -149,8 +151,20 @@ public class BtSettingsViewModel extends ViewModel {
         deviceCommunicationManager.connectDevice(device);
     }
 
-    public void onConnectedDevice() {
+    @SuppressLint("MissingPermission")
+    public void tryReconnectToLastDevice(String lastDeviceAddress, String userName) {
+        if (lastDeviceAddress == null) {
+            return;
+        }
 
+        // Check paired devices
+        for (BluetoothDevice device : mBluetoothAdapter.getBondedDevices()) {
+            if (device.getAddress().equals(lastDeviceAddress)) {
+                // Found the device, now connect to it
+                connectToDevice(device, userName);
+                return;
+            }
+        }
     }
 
 

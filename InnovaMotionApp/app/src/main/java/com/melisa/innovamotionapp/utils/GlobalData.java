@@ -2,13 +2,14 @@ package com.melisa.innovamotionapp.utils;
 
 import android.app.Application;
 import android.bluetooth.BluetoothDevice;
-import android.util.ArraySet;
 
 import androidx.lifecycle.LiveData;
 import androidx.lifecycle.MutableLiveData;
 
 import com.melisa.innovamotionapp.bluetooth.DeviceCommunicationManager;
 import com.melisa.innovamotionapp.data.posture.Posture;
+
+import java.util.LinkedHashSet;
 
 public class GlobalData extends Application {
     private static GlobalData instance;
@@ -17,6 +18,7 @@ public class GlobalData extends Application {
     public void onCreate() {
         super.onCreate();
         instance = this;
+        userDeviceSettingsStorage = new UserDeviceSettingsStorage(this);
     }
     public static GlobalData getInstance() {
         return instance;
@@ -24,8 +26,9 @@ public class GlobalData extends Application {
 
     public final DeviceCommunicationManager deviceCommunicationManager = new DeviceCommunicationManager(this);
 
-    public ArraySet<BluetoothDevice> nearbyBtDevices = new ArraySet<>();
+    public LinkedHashSet<BluetoothDevice> nearbyBtDevices = new LinkedHashSet<>();
 
+    public UserDeviceSettingsStorage userDeviceSettingsStorage;
     private final MutableLiveData<Posture> receivedPosture = new MutableLiveData<>();
     private final MutableLiveData<Boolean> isConnectedDevice = new MutableLiveData<>();
 
@@ -42,6 +45,5 @@ public class GlobalData extends Application {
     public void setIsConnectedDevice(boolean connectionEstablished) {
         isConnectedDevice.postValue(connectionEstablished);
     }
-    public String childName = "Popescu Mihaita";
-
+    public String userName = "Popescu Mihaita";
 }

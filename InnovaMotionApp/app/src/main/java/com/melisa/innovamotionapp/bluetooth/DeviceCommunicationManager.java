@@ -12,6 +12,11 @@ import androidx.core.content.ContextCompat;
 public class DeviceCommunicationManager {
     private final Context context;
     private DeviceCommunicationService deviceCommunicationService;
+
+    public BluetoothDevice getDeviceToConnect() {
+        return deviceToConnect;
+    }
+
     private BluetoothDevice deviceToConnect; // Store the device to connect
     private ServiceConnection serviceConnection = new ServiceConnection() {
         @Override
@@ -43,6 +48,7 @@ public class DeviceCommunicationManager {
         deviceToConnect = device;
 
         // Start the service if it's not running yet
+
         if (deviceCommunicationService == null) {
             // Create an Intent to start the service
             Intent serviceIntent = new Intent(context, DeviceCommunicationService.class);
@@ -80,9 +86,10 @@ public class DeviceCommunicationManager {
     /**
      * Stop the service when no device is connected.
      */
-    private void stopService() {
+    public void stopService() {
         if (deviceCommunicationService != null) {
             Intent serviceIntent = new Intent(context, DeviceCommunicationService.class);
+            context.unbindService(serviceConnection);
             context.stopService(serviceIntent);
             deviceCommunicationService = null;
         }
