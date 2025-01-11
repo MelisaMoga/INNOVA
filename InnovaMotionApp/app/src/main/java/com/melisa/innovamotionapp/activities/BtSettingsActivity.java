@@ -65,8 +65,6 @@ public class BtSettingsActivity extends AppCompatActivity {
         viewModel.getNearbyDevices().observe(this, devices -> {
             String userName = binding.inputChildName.getText().toString();
 
-            String lastDeviceAddress = GlobalData.getInstance().userDeviceSettingsStorage.getLatestDeviceAddress();
-            viewModel.tryReconnectToLastDevice(lastDeviceAddress, userName);
 
             // Display nearby devices
             NearbyDeviceDataAdapter adapter = new NearbyDeviceDataAdapter(

@@ -126,8 +126,15 @@ public class BtSettingsViewModel extends ViewModel {
 
 
     public void onNearbyDeviceFound(BluetoothDevice device) {
-        globalData.nearbyBtDevices.add(device);
-        nearbyDevices.setValue(new ArrayList<>(globalData.nearbyBtDevices));
+        String lastDeviceAddress = GlobalData.getInstance().userDeviceSettingsStorage.getLatestDeviceAddress();
+        // Try to reconnect to it, if is the same address as last one
+        if (device.getAddress().equals(lastDeviceAddress)) {
+            String userName = globalData.userDeviceSettingsStorage.getLatestUser();
+            connectToDevice(device, userName);
+        } else {
+            globalData.nearbyBtDevices.add(device);
+            nearbyDevices.setValue(new ArrayList<>(globalData.nearbyBtDevices));
+        }
     }
 
     private void onDiscoveryFinished() {
@@ -149,22 +156,6 @@ public class BtSettingsViewModel extends ViewModel {
 
         deviceCommunicationManager = globalData.deviceCommunicationManager;
         deviceCommunicationManager.connectDevice(device);
-    }
-
-    @SuppressLint("MissingPermission")
-    public void tryReconnectToLastDevice(String lastDeviceAddress, String userName) {
-        if (lastDeviceAddress == null) {
-            return;
-        }
-
-        // Check paired devices
-        for (BluetoothDevice device : mBluetoothAdapter.getBondedDevices()) {
-            if (device.getAddress().equals(lastDeviceAddress)) {
-                // Found the device, now connect to it
-                connectToDevice(device, userName);
-                return;
-            }
-        }
     }
 
 
