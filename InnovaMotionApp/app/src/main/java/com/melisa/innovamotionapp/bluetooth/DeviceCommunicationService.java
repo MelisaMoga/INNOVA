@@ -2,6 +2,7 @@ package com.melisa.innovamotionapp.bluetooth;
 
 import static android.content.ContentValues.TAG;
 
+import android.annotation.SuppressLint;
 import android.app.Notification;
 import android.app.NotificationChannel;
 import android.app.NotificationManager;
@@ -66,8 +67,8 @@ public class DeviceCommunicationService extends Service {
     private Notification createNotification() {
         // Build your notification here
         return new NotificationCompat.Builder(this, CHANNEL_ID)
-                .setContentTitle("Bluetooth Service")
-                .setContentText("Bluetooth communication in progress")
+                .setContentTitle("InnovaMotion Service")
+                .setContentText("Bluetooth communication service is running")
                 .setSmallIcon(R.drawable.baseline_bluetooth_connected_24)
                 .build();
     }
@@ -96,16 +97,16 @@ public class DeviceCommunicationService extends Service {
             deviceCommunicationThread = new DeviceCommunicationThread(device, new DeviceCommunicationThread.DataCallback() {
 
                 @Override
-                public void onConnectionEstablished() {
+                public void onConnectionEstablished(BluetoothDevice device) {
                     GlobalData.getInstance().setIsConnectedDevice(true);
 
                     // Reset consecutive attempts
                     attemptToReconnectCounter = 0;
 
                     // Update the foreground notification to indicate the device is connected
-                    Notification notification = new NotificationCompat.Builder(DeviceCommunicationService.this, CHANNEL_ID)
-                            .setContentTitle("Bluetooth Device Connected")
-                            .setContentText("Communication with your device is ongoing.")
+                    @SuppressLint("MissingPermission") Notification notification = new NotificationCompat.Builder(DeviceCommunicationService.this, CHANNEL_ID)
+                            .setContentTitle(device.getName() + "Connected")
+                            .setContentText("Communication is ongoing.")
                             .setSmallIcon(R.drawable.baseline_bluetooth_connected_24)
                             .setPriority(NotificationCompat.PRIORITY_LOW)
                             .build();

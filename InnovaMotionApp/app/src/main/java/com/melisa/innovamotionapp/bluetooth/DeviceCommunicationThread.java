@@ -20,7 +20,7 @@ public class DeviceCommunicationThread extends Thread {
     }
 
     public interface DataCallback {
-        void onConnectionEstablished();
+        void onConnectionEstablished(BluetoothDevice device);
         void onDataReceived(String data);
         void onConnectionDisconnected();
     }
@@ -45,7 +45,7 @@ public class DeviceCommunicationThread extends Thread {
             // Connect to the remote device through the socket. This call blocks
             // until it succeeds or throws an exception.
             socket.connect();
-            callback.onConnectionEstablished();
+            callback.onConnectionEstablished(device);
 //            sendMessageToMainThread(MessageHandler.STATE_CONNECTED, "");
         } catch (IOException connectException) {
             // Unable to connect; close the socket
