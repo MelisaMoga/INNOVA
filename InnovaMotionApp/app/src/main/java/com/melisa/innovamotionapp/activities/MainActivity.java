@@ -46,4 +46,9 @@ public class MainActivity extends AppCompatActivity {
         Intent i = new Intent(this, TimeLapseActivity.class);
         startActivity(i);
     }
+
+    public void LaunchEnergyConsumption(View view) {
+        Intent i = new Intent(this, EnergyConsumptionActivity.class);
+        startActivity(i);
+    }
 }
