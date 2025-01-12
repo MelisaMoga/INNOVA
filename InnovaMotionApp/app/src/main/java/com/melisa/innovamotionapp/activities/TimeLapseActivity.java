@@ -72,6 +72,18 @@ public class TimeLapseActivity extends AppCompatActivity {
                 // Boolean set to display data only once
                 displayedOnce = true;
 
+
+                // Display the savedData's dates interval
+                long startDate = receivedBtDataEntities.get(0).getTimestamp(); // Set startDate as the timestamp of the first entry
+                long endDate = receivedBtDataEntities.get(receivedBtDataEntities.size() - 1).getTimestamp(); // Set endDate as the timestamp of the last entry
+                // Format both date and time (dd/MM/yyyy HH:mm:ss)
+                SimpleDateFormat sdf = new SimpleDateFormat("dd/MM/yyyy HH:mm:ss", Locale.getDefault());
+                String startDateString = sdf.format(new Date(startDate));
+                String endDateString = sdf.format(new Date(endDate));
+                // Creating the date range string
+                String selectedDateRange = startDateString + " - " + endDateString;
+                binding.selectedDateRange.setText(selectedDateRange);
+
                 // Add images and corresponding timestamps (this should come from your data)
                 for (ReceivedBtDataEntity receivedBtDataEntity : receivedBtDataEntities) {
                     // Add posture's picture
@@ -82,7 +94,6 @@ public class TimeLapseActivity extends AppCompatActivity {
 
                     // Format posture's timestamp
                     // Format both date and time (dd/MM/yyyy HH:mm:ss)
-                    SimpleDateFormat sdf = new SimpleDateFormat("dd/MM/yyyy HH:mm:ss", Locale.getDefault());
                     String postureFormatedDate = sdf.format(new Date(receivedBtDataEntity.getTimestamp()));
 
                     // Add posture's formated timestamp
