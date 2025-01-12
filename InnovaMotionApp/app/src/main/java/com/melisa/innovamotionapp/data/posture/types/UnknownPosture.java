@@ -23,4 +23,8 @@ public class UnknownPosture extends Posture {
     public int getPictureCode() {
         return R.raw.unknown;
     }
+    @Override
+    public int getCalories() {
+        return 0;
+    }
 }

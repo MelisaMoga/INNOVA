@@ -23,4 +23,8 @@ public class StandingPosture extends Posture {
     public int getPictureCode() {
         return R.raw.in_picioare;
     }
+    @Override
+    public int getCalories() {
+        return 7;
+    }
 }

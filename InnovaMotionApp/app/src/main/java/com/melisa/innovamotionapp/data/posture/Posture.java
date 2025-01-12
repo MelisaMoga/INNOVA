@@ -5,6 +5,7 @@ public abstract class Posture {
     public abstract int getTextCode();
     public abstract int getVideoCode();
     public abstract int getPictureCode();
+    public abstract int getCalories();
 }
 
 

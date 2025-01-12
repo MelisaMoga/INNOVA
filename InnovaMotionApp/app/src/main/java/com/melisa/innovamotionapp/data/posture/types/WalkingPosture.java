@@ -23,4 +23,8 @@ public class WalkingPosture extends Posture {
     public int getPictureCode() {
         return R.raw.mers;
     }
+    @Override
+    public int getCalories() {
+        return 10;
+    }
 }

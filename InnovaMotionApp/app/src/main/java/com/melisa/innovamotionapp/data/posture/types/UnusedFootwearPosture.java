@@ -23,4 +23,8 @@ public class UnusedFootwearPosture extends Posture {
     public int getPictureCode() {
         return R.raw.neutilizat;
     }
+    @Override
+    public int getCalories() {
+        return 0;
+    }
 }

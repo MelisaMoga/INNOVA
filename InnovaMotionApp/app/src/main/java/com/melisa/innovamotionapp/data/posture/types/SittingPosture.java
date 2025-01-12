@@ -23,4 +23,8 @@ public class SittingPosture extends Posture {
     public int getPictureCode() {
         return R.raw.pe_scaun;
     }
+    @Override
+    public int getCalories() {
+        return 2;
+    }
 }
