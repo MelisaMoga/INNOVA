@@ -1,8 +1,9 @@
-package com.melisa.innovamotionapp.data.posture;
+package com.melisa.innovamotionapp.data.posture.types;
 
 import com.melisa.innovamotionapp.R;
+import com.melisa.innovamotionapp.data.posture.Posture;
 
-public class SittingPosture extends Posture{
+public class SittingPosture extends Posture {
     @Override
     public int getRisc() {
         return R.string.posture_sitting_risk;
@@ -16,5 +17,10 @@ public class SittingPosture extends Posture{
     @Override
     public int getVideoCode() {
         return R.raw.pe_scaun_movie;
+    }
+
+    @Override
+    public int getPictureCode() {
+        return R.raw.pe_scaun;
     }
 }

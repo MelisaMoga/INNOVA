@@ -21,7 +21,7 @@ public class DeviceCommunicationThread extends Thread {
 
     public interface DataCallback {
         void onConnectionEstablished(BluetoothDevice device);
-        void onDataReceived(String data);
+        void onDataReceived(BluetoothDevice device, String data);
         void onConnectionDisconnected();
     }
     byte[] receiveBuffer = new byte[1024];
@@ -67,7 +67,7 @@ public class DeviceCommunicationThread extends Thread {
 
                 // Notify callback
                 Log.d(TAG, "[Thread] MSG: " + receivedData);
-                callback.onDataReceived(receivedData);
+                callback.onDataReceived(device, receivedData);
             } catch (IOException e) {
                 Log.d(TAG, "Input stream was disconnected", e);
 //                sendMessageToMainThread(MessageHandler.STATE_DISCONNECTED, ":(");

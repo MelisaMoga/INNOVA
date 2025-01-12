@@ -16,21 +16,58 @@ import android.util.Log;
 import androidx.core.app.NotificationCompat;
 
 import com.melisa.innovamotionapp.R;
+import com.melisa.innovamotionapp.data.database.InnovaDatabase;
+import com.melisa.innovamotionapp.data.database.ReceivedBtDataEntity;
 import com.melisa.innovamotionapp.data.posture.Posture;
-import com.melisa.innovamotionapp.data.PostureFactory;
+import com.melisa.innovamotionapp.data.posture.PostureFactory;
+import com.melisa.innovamotionapp.utils.Constants;
 import com.melisa.innovamotionapp.utils.GlobalData;
 
 import java.io.File;
 import java.io.FileOutputStream;
 import java.io.IOException;
+import java.util.ArrayList;
+import java.util.List;
 
 public class DeviceCommunicationService extends Service {
     private FileOutputStream fileOutputStream;
 
 
+    /**
+     * @noinspection BusyWait
+     */
     @Override
     public void onCreate() {
         super.onCreate();
+
+        // Init database with current context
+        database = InnovaDatabase.getInstance(this);
+
+        // Start thread that will save receivedData on each second
+        // Start the batch-saving thread
+        new Thread(() -> {
+            while (isBatchSavingRunning) {
+                try {
+                    // Wait for 5 seconds
+                    Thread.sleep(Constants.COUNTDOWN_TIMER_IN_MILLISECONDS_FOR_MESSAGE_SAVE);
+
+                    // Copy and clear the list in a thread-safe manner
+                    List<ReceivedBtDataEntity> currentBatch;
+                    synchronized (lock) {
+                        currentBatch = new ArrayList<>(temporaryReceivedBtDataListToSave);
+                        temporaryReceivedBtDataListToSave.clear();
+                    }
+
+                    // Save the batch to the database
+                    if (!currentBatch.isEmpty()) {
+                        database.receivedBtDataDao().insertAll(currentBatch);
+                    }
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt(); // Restore interrupted status
+                    break;
+                }
+            }
+        }).start();
     }
 
     @Override
@@ -43,6 +80,12 @@ public class DeviceCommunicationService extends Service {
     private static final String CHANNEL_ID = "bluetooth_service_channel";
     private int attemptToReconnectCounter = 0;
     private final int MAX_NUM_CONNECTING_CONSECUTIVE_ATTEMPTS = 2;
+
+    // Database operations
+    private InnovaDatabase database;
+    private final List<ReceivedBtDataEntity> temporaryReceivedBtDataListToSave = new ArrayList<>();
+    private final Object lock = new Object(); // For thread-safe access to the list
+    private volatile boolean isBatchSavingRunning = true; // Flag to stop the batch-saving thread
 
     @Override
     public int onStartCommand(Intent intent, int flags, int startId) {
@@ -91,7 +134,7 @@ public class DeviceCommunicationService extends Service {
 
         try {
             // Prepare the file to store data from the device
-            fileOutputStream = new FileOutputStream(new File(getFilesDir(), device.getAddress() + "_data.txt"));
+            fileOutputStream = new FileOutputStream(new File(getFilesDir(), String.format(Constants.POSTURE_DATA_SAVE_FILE_NAME, device.getAddress())));
 
             // Create a new connection thread to connect to the Bluetooth device
             deviceCommunicationThread = new DeviceCommunicationThread(device, new DeviceCommunicationThread.DataCallback() {
@@ -105,28 +148,37 @@ public class DeviceCommunicationService extends Service {
 
                     // Update the foreground notification to indicate the device is connected
                     @SuppressLint("MissingPermission") Notification notification = new NotificationCompat.Builder(DeviceCommunicationService.this, CHANNEL_ID)
-                            .setContentTitle(device.getName() + "Connected")
+                            .setContentTitle(device.getName() + " Connected")
                             .setContentText("Communication is ongoing.")
                             .setSmallIcon(R.drawable.baseline_bluetooth_connected_24)
                             .setPriority(NotificationCompat.PRIORITY_LOW)
                             .build();
 
                     NotificationManager manager = (NotificationManager) getSystemService(NOTIFICATION_SERVICE);
-                    manager.notify(NOTIFICATION_ID+1, notification);
+                    manager.notify(NOTIFICATION_ID + 1, notification);
                 }
 
                 @Override
-                public void onDataReceived(String receivedData) {
+                public void onDataReceived(BluetoothDevice device, String receivedData) {
                     Log.d(TAG, "[Service] MSG: " + receivedData);
-                    // Save receivedData into file
+                    // Temporary store receivedData into list
                     try {
                         fileOutputStream.write((receivedData + "\n").getBytes());
                     } catch (IOException e) {
                         Log.d(TAG, "ERROR closing input stream", e);
                     }
+                    ReceivedBtDataEntity receivedBtDataEntity = new ReceivedBtDataEntity(
+                            device.getAddress(),
+                            System.currentTimeMillis(),
+                            receivedData
+                    );
+                    // Add the received data to the list in a thread-safe manner
+                    synchronized (lock) {
+                        temporaryReceivedBtDataListToSave.add(receivedBtDataEntity);
+                    }
+
                     // Translate receivedData into Posture
                     Posture posture = PostureFactory.createPosture(receivedData);
-
                     // Update LiveData with received data
                     GlobalData.getInstance().setReceivedPosture(posture);
                 }
@@ -182,6 +234,13 @@ public class DeviceCommunicationService extends Service {
             }
             deviceCommunicationThread = null;
         }
+    }
+
+    @Override
+    public void onDestroy() {
+        super.onDestroy();
+
+        isBatchSavingRunning = false; // Signal the batch-saving thread to stop
     }
 
     /**

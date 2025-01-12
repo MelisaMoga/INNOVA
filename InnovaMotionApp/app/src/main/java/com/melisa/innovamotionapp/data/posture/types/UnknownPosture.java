@@ -1,6 +1,7 @@
-package com.melisa.innovamotionapp.data.posture;
+package com.melisa.innovamotionapp.data.posture.types;
 
 import com.melisa.innovamotionapp.R;
+import com.melisa.innovamotionapp.data.posture.Posture;
 
 public class UnknownPosture extends Posture {
     @Override
@@ -16,5 +17,10 @@ public class UnknownPosture extends Posture {
     @Override
     public int getVideoCode() {
         return -1;
+    }
+
+    @Override
+    public int getPictureCode() {
+        return R.raw.unknown;
     }
 }

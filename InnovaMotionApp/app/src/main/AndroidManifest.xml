@@ -25,6 +25,10 @@
         android:supportsRtl="true"
         android:theme="@style/Theme.InnovaMotionApp"
         tools:targetApi="31">
+
+        <activity
+            android:name=".activities.StatisticsActivity"
+            android:exported="true"/>
         <activity
             android:name=".activities.BtConnectedActivity"
             android:exported="true"

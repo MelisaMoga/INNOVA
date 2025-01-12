@@ -1,6 +1,4 @@
-package com.melisa.innovamotionapp.data;
-
-import com.melisa.innovamotionapp.data.posture.Posture;
+package com.melisa.innovamotionapp.data.posture;
 
 import java.io.BufferedReader;
 import java.io.File;

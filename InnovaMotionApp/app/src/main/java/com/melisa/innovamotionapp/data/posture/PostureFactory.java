@@ -1,12 +1,11 @@
-package com.melisa.innovamotionapp.data;
+package com.melisa.innovamotionapp.data.posture;
 
-import com.melisa.innovamotionapp.data.posture.FallingPosture;
-import com.melisa.innovamotionapp.data.posture.Posture;
-import com.melisa.innovamotionapp.data.posture.SittingPosture;
-import com.melisa.innovamotionapp.data.posture.StandingPosture;
-import com.melisa.innovamotionapp.data.posture.UnknownPosture;
-import com.melisa.innovamotionapp.data.posture.UnusedFootwearPosture;
-import com.melisa.innovamotionapp.data.posture.WalkingPosture;
+import com.melisa.innovamotionapp.data.posture.types.FallingPosture;
+import com.melisa.innovamotionapp.data.posture.types.SittingPosture;
+import com.melisa.innovamotionapp.data.posture.types.StandingPosture;
+import com.melisa.innovamotionapp.data.posture.types.UnknownPosture;
+import com.melisa.innovamotionapp.data.posture.types.UnusedFootwearPosture;
+import com.melisa.innovamotionapp.data.posture.types.WalkingPosture;
 
 public class PostureFactory {
 

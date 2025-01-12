@@ -10,7 +10,7 @@ import android.widget.Toast;
 import androidx.appcompat.app.AppCompatActivity;
 
 import com.melisa.innovamotionapp.data.posture.Posture;
-import com.melisa.innovamotionapp.data.posture.UnknownPosture;
+import com.melisa.innovamotionapp.data.posture.types.UnknownPosture;
 import com.melisa.innovamotionapp.databinding.BtConnectedActivityBinding;
 import com.melisa.innovamotionapp.utils.GlobalData;
 
