@@ -20,6 +20,7 @@ import android.widget.Toast;
 import androidx.activity.result.ActivityResult;
 import androidx.activity.result.ActivityResultLauncher;
 import androidx.activity.result.contract.ActivityResultContracts;
+import androidx.annotation.RequiresApi;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.lifecycle.ViewModelProvider;
 
@@ -170,7 +171,15 @@ public class BtSettingsActivity extends AppCompatActivity {
     private void onStartBtnClicked(View view) {
         updateUI(BtSettingsState.AFTER_BTN_PRESSED);
 
-        boolean requirePermissions = doesNeedRequestPermission(new String[]{Manifest.permission.BLUETOOTH_SCAN, Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION, Manifest.permission.BLUETOOTH_CONNECT});
+        String[] requiredPermissions;
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            requiredPermissions = new String[]{Manifest.permission.BLUETOOTH_SCAN, Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION, Manifest.permission.BLUETOOTH_CONNECT};
+        } else {
+            requiredPermissions = new String[]{Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION};
+        }
+
+
+        boolean requirePermissions = doesNeedRequestPermission(requiredPermissions);
         if (requirePermissions) {
             // Safe return in case permissions are not allowed.
             updateUI(BtSettingsState.BEFORE_BTN_PRESSED);
@@ -186,9 +195,7 @@ public class BtSettingsActivity extends AppCompatActivity {
         if (activityResult.getResultCode() == AppCompatActivity.RESULT_OK) {
 
             log("Bluetooth enabled successfully");
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-                viewModel.startBluetoothDiscovery();
-            }
+            viewModel.startBluetoothDiscovery();
         } else {
             log("Failed to enable Bluetooth");
         }
@@ -198,7 +205,7 @@ public class BtSettingsActivity extends AppCompatActivity {
         for (String perm : perms) {
             if (this.checkSelfPermission(perm) != PackageManager.PERMISSION_GRANTED) {
 
-                this.requestPermissions(new String[]{perm}, 2);
+                this.requestPermissions(perms, 2);
                 return true;
             }
         }
@@ -232,8 +239,16 @@ public class BtSettingsActivity extends AppCompatActivity {
         filter = new IntentFilter(BluetoothAdapter.ACTION_DISCOVERY_FINISHED);
         registerReceiver(viewModel.getDiscoveryFinishedReceiver(), filter);
 
+        String[] requiredPermissions;
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            requiredPermissions = new String[]{Manifest.permission.POST_NOTIFICATIONS, Manifest.permission.BLUETOOTH_SCAN, Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION, Manifest.permission.BLUETOOTH_CONNECT};
+        } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            requiredPermissions = new String[]{Manifest.permission.BLUETOOTH_SCAN, Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION, Manifest.permission.BLUETOOTH_CONNECT};
+        } else {
+            requiredPermissions = new String[]{Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION};
+        }
 
-        boolean requirePermissions = doesNeedRequestPermission(new String[]{Manifest.permission.POST_NOTIFICATIONS, Manifest.permission.BLUETOOTH_SCAN, Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION, Manifest.permission.BLUETOOTH_CONNECT});
+        boolean requirePermissions = doesNeedRequestPermission(requiredPermissions);
         if (requirePermissions) {
             // Safe return in case permissions are not allowed.
             return;

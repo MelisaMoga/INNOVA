@@ -26,7 +26,6 @@ public class MainActivity extends AppCompatActivity {
 
     }
 
-    @SuppressLint("MissingPermission")
     @Override
     protected void onResume() {
         super.onResume();
