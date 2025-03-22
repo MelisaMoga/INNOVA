@@ -73,13 +73,15 @@ public class StatisticsActivity extends AppCompatActivity {
         // Fetch all data from the database
         viewModel.getDataForDevice().observe(this, receivedBtDataEntities -> {
             if (showDefaultData) {
-                // If data is available, find the start and end timestamps
-                startDate = receivedBtDataEntities.get(0).getTimestamp(); // Set startDate as the timestamp of the first entry
-                endDate = receivedBtDataEntities.get(receivedBtDataEntities.size() - 1).getTimestamp(); // Set endDate as the timestamp of the last entry
+                if (receivedBtDataEntities != null && !receivedBtDataEntities.isEmpty()) {
+                    // If data is available, find the start and end timestamps
+                    startDate = receivedBtDataEntities.get(0).getTimestamp(); // Set startDate as the timestamp of the first entry
+                    endDate = receivedBtDataEntities.get(receivedBtDataEntities.size() - 1).getTimestamp(); // Set endDate as the timestamp of the last entry
 
-                // Update UI with the selected date range (formatted)
-                updateWithDateRange(startDate, endDate);
-                this.onSavedDataChange(receivedBtDataEntities);
+                    // Update UI with the selected date range (formatted)
+                    updateWithDateRange(startDate, endDate);
+                    this.onSavedDataChange(receivedBtDataEntities);
+                }
             }
         });
 
