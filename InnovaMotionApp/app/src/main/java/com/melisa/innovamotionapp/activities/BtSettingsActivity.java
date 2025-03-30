@@ -4,13 +4,17 @@ import static android.content.ContentValues.TAG;
 import static com.melisa.innovamotionapp.ui.viewmodels.BtSettingsViewModel.BtSettingsState;
 
 import android.Manifest;
+import android.app.AlertDialog;
 import android.bluetooth.BluetoothAdapter;
 import android.bluetooth.BluetoothDevice;
+import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
 import android.content.pm.PackageManager;
+import android.location.LocationManager;
 import android.os.Build;
 import android.os.Bundle;
+import android.provider.Settings;
 import android.text.Editable;
 import android.text.TextWatcher;
 import android.util.Log;
@@ -20,6 +24,7 @@ import android.widget.Toast;
 import androidx.activity.result.ActivityResult;
 import androidx.activity.result.ActivityResultLauncher;
 import androidx.activity.result.contract.ActivityResultContracts;
+import androidx.annotation.NonNull;
 import androidx.annotation.RequiresApi;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.lifecycle.ViewModelProvider;
@@ -37,7 +42,7 @@ public class BtSettingsActivity extends AppCompatActivity {
     //    private final GlobalData globalData = GlobalData.getInstance();
     private final ActivityResultLauncher<Intent> enableBluetoothLauncher = registerForActivityResult(
             new ActivityResultContracts.StartActivityForResult(), this::processEnableBluetoothResponse);
-
+    private AlertDialog locationDialog = null;
 
 
     @Override
@@ -171,16 +176,7 @@ public class BtSettingsActivity extends AppCompatActivity {
     private void onStartBtnClicked(View view) {
         updateUI(BtSettingsState.AFTER_BTN_PRESSED);
 
-        String[] requiredPermissions;
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-            requiredPermissions = new String[]{Manifest.permission.BLUETOOTH_SCAN, Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION, Manifest.permission.BLUETOOTH_CONNECT};
-        } else {
-            requiredPermissions = new String[]{Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION};
-        }
-
-
-        boolean requirePermissions = doesNeedRequestPermission(requiredPermissions);
-        if (requirePermissions) {
+        if (checkAllRequirements()) {
             // Safe return in case permissions are not allowed.
             updateUI(BtSettingsState.BEFORE_BTN_PRESSED);
             return;
@@ -205,7 +201,7 @@ public class BtSettingsActivity extends AppCompatActivity {
         for (String perm : perms) {
             if (this.checkSelfPermission(perm) != PackageManager.PERMISSION_GRANTED) {
 
-                this.requestPermissions(perms, 2);
+                this.requestPermissions(new String[]{perm}, 2);
                 return true;
             }
         }
@@ -239,21 +235,72 @@ public class BtSettingsActivity extends AppCompatActivity {
         filter = new IntentFilter(BluetoothAdapter.ACTION_DISCOVERY_FINISHED);
         registerReceiver(viewModel.getDiscoveryFinishedReceiver(), filter);
 
-        String[] requiredPermissions;
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            requiredPermissions = new String[]{Manifest.permission.POST_NOTIFICATIONS, Manifest.permission.BLUETOOTH_SCAN, Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION, Manifest.permission.BLUETOOTH_CONNECT};
-        } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-            requiredPermissions = new String[]{Manifest.permission.BLUETOOTH_SCAN, Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION, Manifest.permission.BLUETOOTH_CONNECT};
-        } else {
-            requiredPermissions = new String[]{Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION};
-        }
 
-        boolean requirePermissions = doesNeedRequestPermission(requiredPermissions);
-        if (requirePermissions) {
+        if (checkAllRequirements()) {
             // Safe return in case permissions are not allowed.
             return;
         }
     }
+
+    private String[] getRequiredPermissions() {
+        String[] requiredPermissions;
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            requiredPermissions = new String[]{Manifest.permission.POST_NOTIFICATIONS, Manifest.permission.BLUETOOTH_SCAN, Manifest.permission.BLUETOOTH_CONNECT};
+        } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            requiredPermissions = new String[]{Manifest.permission.BLUETOOTH_SCAN, Manifest.permission.BLUETOOTH_CONNECT};
+        } else {
+            requiredPermissions = new String[]{Manifest.permission.ACCESS_FINE_LOCATION};
+        }
+        return requiredPermissions;
+    }
+
+    /**
+     * Checks if all requirements (permissions + location for older OS) are met.
+     * If not, it requests them or shows a location dialog. Returns `false` if everything
+     * is good, or `true` otherwise.
+     */
+    private boolean checkAllRequirements() {
+        String[] requiredPermissions = getRequiredPermissions();
+
+
+        boolean requirePermissions = doesNeedRequestPermission(requiredPermissions);
+
+        // 2. If we are on an older device (below S), ensure location is enabled
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) {
+            LocationManager locationManager = (LocationManager) getSystemService(Context.LOCATION_SERVICE);
+            boolean isLocationEnabled = locationManager.isProviderEnabled(LocationManager.GPS_PROVIDER) ||
+                    locationManager.isProviderEnabled(LocationManager.NETWORK_PROVIDER);
+            if (!isLocationEnabled) {
+                showLocationDisabledDialog();
+                return true;
+            }
+        }
+
+        return requirePermissions;
+    }
+
+    private void showLocationDisabledDialog() {
+        // If the dialog is already showing, just return
+        if (locationDialog != null && locationDialog.isShowing()) {
+            return;
+        }
+
+        // Otherwise, build a new one
+        locationDialog = new AlertDialog.Builder(this)
+                .setTitle("Location Services Required")
+                .setMessage("Please enable location services for Bluetooth scanning.")
+                .setPositiveButton("Go to Settings", (dialog, which) -> {
+                    Intent settingsIntent = new Intent(Settings.ACTION_LOCATION_SOURCE_SETTINGS);
+                    startActivity(settingsIntent);
+                })
+                .setNegativeButton("Cancel", (dialog, which) -> {
+                    dialog.dismiss();
+                })
+                .create();
+
+        locationDialog.show();
+    }
+
 
     @Override
     protected void onPause() {
@@ -263,5 +310,10 @@ public class BtSettingsActivity extends AppCompatActivity {
         unregisterReceiver(viewModel.getBluetoothStateReceiver());
         unregisterReceiver(viewModel.getNearbyDeviceDiscoveryReceiver());
         unregisterReceiver(viewModel.getDiscoveryFinishedReceiver());
+
+        if (locationDialog != null && locationDialog.isShowing()) {
+            locationDialog.dismiss();
+            locationDialog = null;
+        }
     }
 }
