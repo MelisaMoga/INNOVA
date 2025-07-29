@@ -7,6 +7,9 @@ import android.util.Log;
 
 import java.io.IOException;
 import java.io.InputStream;
+import java.io.BufferedReader;
+import java.io.InputStreamReader;
+import java.nio.charset.StandardCharsets; // Recommended for explicit encoding
 import java.util.UUID;
 
 public class DeviceCommunicationThread extends Thread {
@@ -14,6 +17,11 @@ public class DeviceCommunicationThread extends Thread {
     private final BluetoothSocket socket;
     private final InputStream inputStream;
     private final DataCallback callback;
+
+    // Define the maximum number of characters allowed per line
+    // Adjust this value based on the expected maximum length of your messages.
+    // For "0xAB3311" (8 chars), something like 64 or 128 provides ample buffer.
+    private static final int MAX_CHARS_PER_LINE = 64;
 
     public BluetoothDevice getDevice() {
         return device;
@@ -24,7 +32,7 @@ public class DeviceCommunicationThread extends Thread {
         void onDataReceived(BluetoothDevice device, String data);
         void onConnectionDisconnected();
     }
-    byte[] receiveBuffer = new byte[1024];
+
     private static final String TAG = "MY_APP_DEBUG_TAG";
     public static UUID APP_UUID = UUID.fromString("00001101-0000-1000-8000-00805F9B34FB");
 
@@ -34,66 +42,81 @@ public class DeviceCommunicationThread extends Thread {
         this.socket = device.createRfcommSocketToServiceRecord(APP_UUID);
         this.inputStream = socket.getInputStream();
         this.callback = callback;
-
-//        sendMessageToMainThread(MessageHandler.STATE_CONNECTING, "");
     }
-
 
     @SuppressLint("MissingPermission")
     public void run() {
         try {
-            // Connect to the remote device through the socket. This call blocks
-            // until it succeeds or throws an exception.
+            Log.d(TAG, "Attempting to connect to Bluetooth device: " + device.getName() + " (" + device.getAddress() + ")");
             socket.connect();
+            Log.i(TAG, "Bluetooth connection established with " + device.getName());
             callback.onConnectionEstablished(device);
-//            sendMessageToMainThread(MessageHandler.STATE_CONNECTED, "");
         } catch (IOException connectException) {
-            // Unable to connect; close the socket
-//            sendMessageToMainThread(MessageHandler.STATE_CONNECTION_FAILED, "");
-            Log.d(TAG, "Error at socket connect", connectException);
+            Log.e(TAG, "Error connecting to Bluetooth device", connectException);
+            cancel(); // Close socket and notify disconnect
+            return; // Exit thread if connection fails
         }
         startReceiving();
     }
 
     private void startReceiving() {
-        int bytes; // bytes returned from read()
+        // Using BufferedReader to read line by line.
+        // It's generally more efficient than reading byte-by-byte for text streams.
+        // Explicitly specifying StandardCharsets.UTF_8 is recommended for robust text handling.
+        // If your device strictly sends ASCII, you could use StandardCharsets.US_ASCII.
+        BufferedReader bufferedReader = new BufferedReader(new InputStreamReader(inputStream, StandardCharsets.UTF_8));
+        String receivedLine;
 
-        // Keep listening to the InputStream until an exception occurs.
+        Log.d(TAG, "Starting to receive data from Bluetooth device.");
+
+        // Keep listening to the InputStream until an exception occurs or stream closes.
         while (true) {
             try {
-                // Read from the InputStream.
-                bytes = inputStream.read(receiveBuffer);
-                String receivedData = new String(receiveBuffer, 0, bytes);
+                // This reads until a newline character (\n), a carriage return (\r),
+                // or a carriage return followed immediately by a newline (\r\n).
+                receivedLine = bufferedReader.readLine();
 
-                // Notify callback
-                Log.d(TAG, "[Thread] MSG: " + receivedData);
-                callback.onDataReceived(device, receivedData);
+                if (receivedLine != null) {
+                    // Implement the character limit check here
+                    if (receivedLine.length() > MAX_CHARS_PER_LINE) {
+                        Log.w(TAG, "Received line exceeded max length (" + MAX_CHARS_PER_LINE + " chars). Original length: " + receivedLine.length() + ". Truncating data.");
+                        // Truncate the string to the maximum allowed length.
+                        // The truncated part is lost, but prevents oversized strings.
+                        receivedLine = receivedLine.substring(0, MAX_CHARS_PER_LINE);
+                    }
+
+                    Log.d(TAG, "[Thread] Received MSG: \"" + receivedLine + "\"");
+                    callback.onDataReceived(device, receivedLine);
+                } else {
+                    // readLine() returns null if the stream is closed gracefully
+                    Log.i(TAG, "Input stream closed gracefully by remote device or system.");
+                    break; // Exit the receiving loop
+                }
             } catch (IOException e) {
-                Log.d(TAG, "Input stream was disconnected", e);
-//                sendMessageToMainThread(MessageHandler.STATE_DISCONNECTED, ":(");
-                cancel();
+                // This catches read errors or if the stream is unexpectedly disconnected
+                Log.e(TAG, "I/O error during data reception (stream likely disconnected)", e);
+                break; // Exit loop on error
+            } catch (Exception e) {
+                // Catch any other unexpected exceptions during processing
+                Log.e(TAG, "An unexpected error occurred during data reception", e);
                 break;
             }
         }
+        // Ensure the socket is closed and callback notified when the receiving loop exits
+        cancel();
+        Log.i(TAG, "Bluetooth data reception thread terminated.");
     }
-
-
-
-//    // Function where the write operation is performed
-//    public void write(byte[] bytes) {
-//        try {
-//            // Write the outputStream value
-//            outStream.write(bytes);
-//        } catch (IOException e) {
-//            // Print the error
-//            Log.d(TAG, "Error on writing to connected socket", e);
-//        }
-//    }
 
     // Closes the client socket and causes the thread to finish.
     public void cancel() {
+        if (socket == null) {
+            Log.d(TAG, "Socket is null, no need to close.");
+            return;
+        }
         try {
+            Log.i(TAG, "Attempting to close Bluetooth client socket.");
             socket.close();
+            Log.i(TAG, "Bluetooth client socket closed.");
             callback.onConnectionDisconnected();
         } catch (IOException e) {
             Log.e(TAG, "Could not close the client socket", e);
