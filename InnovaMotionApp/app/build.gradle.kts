@@ -1,5 +1,6 @@
 plugins {
     alias(libs.plugins.android.application)
+    id("com.google.gms.google-services")
 }
 
 android {
@@ -50,4 +51,9 @@ dependencies {
     androidTestImplementation(libs.espresso.core)
     // https://mvnrepository.com/artifact/com.github.PhilJay/MPAndroidChart
     implementation(libs.mpandroidchart)
+    implementation(libs.firebase.bom)
+    implementation(libs.firebase.analytics)
+    implementation(libs.firebase.auth)
+    implementation(libs.firebase.firestore)
+    implementation(libs.firebase.messaging)
 }

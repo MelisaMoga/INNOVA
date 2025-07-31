@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "345860324257",
+    "project_id": "innova-motion-app",
+    "storage_bucket": "innova-motion-app.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:345860324257:android:7ace3d725d14529c3429e0",
+        "android_client_info": {
+          "package_name": "com.melisa.innovamotionapp"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyD0p8oK2mBISiaqqKHN9-L5sEHajSidE-Q"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
