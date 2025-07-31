@@ -12,12 +12,12 @@ public class LoginDataSource {
     public Result<LoggedInUser> login(String username, String password) {
 
         try {
-            // TODO: handle loggedInUser authentication
-            LoggedInUser fakeUser =
-                    new LoggedInUser(
+            // This legacy email/password flow is deprecated in favor of Google Sign-In.
+            // Keep a fake success to preserve sample behavior if used.
+            LoggedInUser placeholderUser = new LoggedInUser(
                             java.util.UUID.randomUUID().toString(),
-                            "Jane Doe");
-            return new Result.Success<>(fakeUser);
+                            username);
+            return new Result.Success<>(placeholderUser);
         } catch (Exception e) {
             return new Result.Error(new IOException("Error logging in", e));
         }
