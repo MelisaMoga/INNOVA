@@ -12,6 +12,7 @@ import android.widget.RadioButton;
 
 import androidx.annotation.NonNull;
 import androidx.appcompat.app.AppCompatActivity;
+import androidx.core.content.ContextCompat;
 import androidx.credentials.ClearCredentialStateRequest;
 import androidx.credentials.Credential;
 import androidx.credentials.CredentialManager;
@@ -27,6 +28,15 @@ import com.google.android.libraries.identity.googleid.GoogleIdTokenCredential;
 import com.google.android.material.button.MaterialButton;
 import com.google.android.material.textfield.TextInputEditText;
 import com.google.android.material.textfield.TextInputLayout;
+import android.text.TextWatcher;
+import android.text.Editable;
+import android.widget.ArrayAdapter;
+import android.widget.ListView;
+import android.widget.PopupWindow;
+import android.os.Handler;
+import android.os.Looper;
+import android.view.ViewGroup;
+import android.view.LayoutInflater;
 import com.google.firebase.auth.AuthCredential;
 import com.google.firebase.auth.FirebaseAuth;
 import com.google.firebase.auth.FirebaseUser;
@@ -39,6 +49,8 @@ import com.melisa.innovamotionapp.activities.MainActivity;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.concurrent.Executors;
+import java.util.List;
+import java.util.ArrayList;
 
 public class LoginActivity extends AppCompatActivity {
 
@@ -59,6 +71,15 @@ public class LoginActivity extends AppCompatActivity {
     private RadioButton roleSupervised;
     private TextView signedInAsText;
     private View loadingProgress;
+
+    // Autocomplete functionality
+    private PopupWindow suggestionPopup;
+    private ListView suggestionListView;
+    private ArrayAdapter<String> emailAdapter;
+    private List<String> supervisedEmails;
+    private Handler searchHandler;
+    private Runnable searchRunnable;
+    private boolean isSettingTextProgrammatically = false;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -102,6 +123,95 @@ public class LoginActivity extends AppCompatActivity {
         signedInAsText = findViewById(R.id.signed_in_as_text);
         signedInSection = findViewById(R.id.signed_in_section);
         loadingProgress = findViewById(R.id.loading);
+
+        setupAutocomplete();
+    }
+
+    private void setupAutocomplete() {
+        Log.d(TAG, "Setting up email autocomplete functionality");
+        
+        // Initialize autocomplete components
+        supervisedEmails = new ArrayList<>();
+        emailAdapter = new ArrayAdapter<>(this, R.layout.autocomplete_item, supervisedEmails);
+        searchHandler = new Handler(Looper.getMainLooper());
+        
+        if (supervisedEmailInput != null) {
+            createSuggestionPopup();
+            
+            // Add text change listener for real-time search
+            supervisedEmailInput.addTextChangedListener(new TextWatcher() {
+                @Override
+                public void beforeTextChanged(CharSequence s, int start, int count, int after) {}
+
+                @Override
+                public void onTextChanged(CharSequence s, int start, int before, int count) {
+                    // Skip search if we're setting text programmatically
+                    if (isSettingTextProgrammatically) {
+                        return;
+                    }
+                    
+                    // Cancel previous search
+                    if (searchRunnable != null) {
+                        searchHandler.removeCallbacks(searchRunnable);
+                    }
+                    
+                    // Schedule new search with delay to avoid too many requests
+                    if (s.length() > 1) {
+                        searchRunnable = () -> searchSupervisedUsers(s.toString());
+                        searchHandler.postDelayed(searchRunnable, 300); // 300ms delay
+                    } else {
+                        // Hide popup when input is too short
+                        hideSuggestionPopup();
+                    }
+                }
+
+                @Override
+                public void afterTextChanged(Editable s) {}
+            });
+            
+            // Hide popup when focus is lost
+            supervisedEmailInput.setOnFocusChangeListener((v, hasFocus) -> {
+                if (!hasFocus) {
+                    hideSuggestionPopup();
+                }
+            });
+            
+            Log.d(TAG, "Autocomplete setup completed");
+        }
+    }
+
+    private void createSuggestionPopup() {
+        // Create ListView for suggestions
+        suggestionListView = new ListView(this);
+        suggestionListView.setAdapter(emailAdapter);
+        suggestionListView.setDividerHeight(1);
+        suggestionListView.setDivider(ContextCompat.getDrawable(this, android.R.color.transparent));
+        suggestionListView.setBackgroundColor(ContextCompat.getColor(this, android.R.color.white));
+        suggestionListView.setElevation(8f);
+        
+        // Handle item clicks
+        suggestionListView.setOnItemClickListener((parent, view, position, id) -> {
+            String selectedEmail = supervisedEmails.get(position);
+            Log.d(TAG, "Selected supervised email from suggestions: " + selectedEmail);
+            
+            // Set flag to prevent triggering search when setting text programmatically
+            isSettingTextProgrammatically = true;
+            supervisedEmailInput.setText(selectedEmail);
+            supervisedEmailInput.setSelection(selectedEmail.length());
+            isSettingTextProgrammatically = false;
+            
+            supervisedEmailLayout.setError(null);
+            hideSuggestionPopup();
+        });
+        
+        // Create popup window
+        suggestionPopup = new PopupWindow(suggestionListView, 
+                ViewGroup.LayoutParams.MATCH_PARENT, 
+                ViewGroup.LayoutParams.WRAP_CONTENT);
+        suggestionPopup.setOutsideTouchable(true);
+        suggestionPopup.setFocusable(false);
+        suggestionPopup.setElevation(8f);
+        suggestionPopup.setBackgroundDrawable(ContextCompat.getDrawable(this, android.R.drawable.editbox_dropdown_light_frame));
     }
 
     private void setupClickListeners() {
@@ -138,6 +248,20 @@ public class LoginActivity extends AppCompatActivity {
             Log.d(TAG, "No authenticated user found");
             showSignInUI();
         }
+    }
+
+    @Override
+    protected void onDestroy() {
+        super.onDestroy();
+        Log.d(TAG, "onDestroy - Cleaning up resources");
+        
+        // Clean up search handler
+        if (searchHandler != null && searchRunnable != null) {
+            searchHandler.removeCallbacks(searchRunnable);
+        }
+        
+        // Clean up popup
+        hideSuggestionPopup();
     }
 
     private void signInWithGoogle() {
@@ -208,14 +332,14 @@ public class LoginActivity extends AppCompatActivity {
             } catch (Exception e) {
                 Log.e(TAG, "Invalid Google ID token", e);
                 runOnUiThread(() -> {
-                    hideLoading();
+                        hideLoading();
                     showErrorToast("Invalid Google ID token");
                 });
             }
         } else {
             Log.w(TAG, "Invalid credential type");
             runOnUiThread(() -> {
-                hideLoading();
+                    hideLoading();
                 showErrorToast("Invalid credential type");
             });
         }
@@ -245,7 +369,7 @@ public class LoginActivity extends AppCompatActivity {
     private void checkUserInFirestore(FirebaseUser user) {
         Log.d(TAG, "Checking user data in Firestore for UID: " + user.getUid());
         showLoading("Loading profile...");
-
+        
         DocumentReference userRef = db.collection("users").document(user.getUid());
         userRef.get()
                 .addOnSuccessListener(document -> {
@@ -254,17 +378,17 @@ public class LoginActivity extends AppCompatActivity {
                         if (role != null && !role.isEmpty()) {
                             Log.d(TAG, "User found with role: " + role);
                             navigateToMainActivity();
-                        } else {
+            } else {
                             Log.d(TAG, "User exists but no role set - showing role selection");
                             showRoleSelectionUI(user);
                         }
-                    } else {
+                } else {
                         Log.d(TAG, "User not found in Firestore - creating profile");
                         createUserProfile(user);
-                    }
+                }
                 })
                 .addOnFailureListener(e -> {
-                    Log.e(TAG, "Error checking user in Firestore", e);
+            Log.e(TAG, "Error checking user in Firestore", e);
                     handleFirestoreError(e);
                 });
     }
@@ -336,6 +460,7 @@ public class LoginActivity extends AppCompatActivity {
 
         showLoading("Saving your role...");
         proceedButton.setEnabled(false);
+        signOutButton.setEnabled(false);
 
         String role = (selectedId == R.id.role_supervisor) ? "supervisor" : "supervised";
         String supervisedEmail = null;
@@ -349,6 +474,7 @@ public class LoginActivity extends AppCompatActivity {
                 supervisedEmailLayout.requestFocus();
                 hideLoading();
                 proceedButton.setEnabled(true);
+                signOutButton.setEnabled(true);
                 return;
             }
             
@@ -357,6 +483,7 @@ public class LoginActivity extends AppCompatActivity {
                 supervisedEmailLayout.requestFocus();
                 hideLoading();
                 proceedButton.setEnabled(true);
+                signOutButton.setEnabled(true);
                 return;
             }
             
@@ -389,6 +516,7 @@ public class LoginActivity extends AppCompatActivity {
                     runOnUiThread(() -> {
                         hideLoading();
                         proceedButton.setEnabled(true);
+                        signOutButton.setEnabled(true);
                         handleFirestoreError(e);
                     });
                 });
@@ -447,6 +575,79 @@ public class LoginActivity extends AppCompatActivity {
         }
     }
 
+    private void searchSupervisedUsers(String query) {
+        if (query.trim().isEmpty() || query.length() < 2) {
+            return;
+        }
+
+        Log.d(TAG, "Searching for supervised users matching: '" + query + "'");
+        
+        // Search for users with role 'supervised' and email containing the query
+        db.collection("users")
+                .whereEqualTo("role", "supervised")
+                .get()
+                .addOnSuccessListener(queryDocumentSnapshots -> {
+                    List<String> matchingEmails = new ArrayList<>();
+                    String lowerQuery = query.toLowerCase();
+                    
+                    queryDocumentSnapshots.forEach(document -> {
+                        String email = document.getString("email");
+                        if (email != null && email.toLowerCase().contains(lowerQuery)) {
+                            matchingEmails.add(email);
+                            Log.d(TAG, "Found matching supervised user: " + email);
+                        }
+                    });
+                    
+                    Log.d(TAG, "Search completed: " + matchingEmails.size() + " supervised users found matching '" + query + "'");
+                    
+                    runOnUiThread(() -> {
+                        supervisedEmails.clear();
+                        supervisedEmails.addAll(matchingEmails);
+                        emailAdapter.notifyDataSetChanged();
+                        
+                        if (!matchingEmails.isEmpty() && supervisedEmailInput.hasFocus()) {
+                            Log.d(TAG, "Showing popup with " + matchingEmails.size() + " suggestions");
+                            showSuggestionPopup();
+                        } else if (matchingEmails.isEmpty()) {
+                            Log.d(TAG, "No supervised users found matching '" + query + "' - user can enter manually");
+                            hideSuggestionPopup();
+                        }
+                    });
+                })
+                .addOnFailureListener(e -> {
+                    Log.w(TAG, "Error searching supervised users: " + e.getMessage(), e);
+                    // Don't show error to user, just continue with manual entry
+                    // This allows the flow to continue even if database is unavailable
+                });
+    }
+
+    private void showSuggestionPopup() {
+        if (suggestionPopup != null && !suggestionPopup.isShowing() && supervisedEmailInput != null) {
+            try {
+                // Calculate popup width to match the TextInputLayout
+                int width = supervisedEmailLayout != null ? supervisedEmailLayout.getWidth() : supervisedEmailInput.getWidth();
+                suggestionPopup.setWidth(width);
+                
+                // Show popup below the input field
+                suggestionPopup.showAsDropDown(supervisedEmailInput, 0, 0);
+                Log.d(TAG, "Suggestion popup shown with " + supervisedEmails.size() + " items");
+            } catch (Exception e) {
+                Log.w(TAG, "Error showing suggestion popup", e);
+            }
+        }
+    }
+
+    private void hideSuggestionPopup() {
+        if (suggestionPopup != null && suggestionPopup.isShowing()) {
+            try {
+                suggestionPopup.dismiss();
+                Log.d(TAG, "Suggestion popup hidden");
+            } catch (Exception e) {
+                Log.w(TAG, "Error hiding suggestion popup", e);
+            }
+        }
+    }
+
     private boolean isValidGmail(String email) {
         return email.matches("^[A-Za-z0-9+_.-]+@gmail\\.com$");
     }
@@ -455,9 +656,12 @@ public class LoginActivity extends AppCompatActivity {
         Log.d(TAG, "Showing loading: " + message);
         runOnUiThread(() -> {
             loadingProgress.setVisibility(View.VISIBLE);
-            googleSignInButton.setEnabled(false);
+        googleSignInButton.setEnabled(false);
             if (proceedButton != null) {
                 proceedButton.setEnabled(false);
+            }
+            if (signOutButton != null) {
+                signOutButton.setEnabled(false);
             }
         });
     }
@@ -466,9 +670,12 @@ public class LoginActivity extends AppCompatActivity {
         Log.d(TAG, "Hiding loading");
         runOnUiThread(() -> {
             loadingProgress.setVisibility(View.GONE);
-            googleSignInButton.setEnabled(true);
+        googleSignInButton.setEnabled(true);
             if (proceedButton != null) {
                 proceedButton.setEnabled(true);
+            }
+            if (signOutButton != null) {
+                signOutButton.setEnabled(true);
             }
         });
     }
