@@ -26,33 +26,28 @@ import androidx.activity.result.ActivityResultLauncher;
 import androidx.activity.result.contract.ActivityResultContracts;
 import androidx.annotation.NonNull;
 import androidx.annotation.RequiresApi;
-import androidx.appcompat.app.AppCompatActivity;
+import androidx.annotation.Nullable;
 import androidx.lifecycle.ViewModelProvider;
 
-import com.google.firebase.auth.FirebaseAuth;
 import com.google.android.material.button.MaterialButton;
 import com.melisa.innovamotionapp.R;
-import com.melisa.innovamotionapp._login.login.LoginActivity;
 import com.melisa.innovamotionapp.databinding.BtSettingsActivityBinding;
 import com.melisa.innovamotionapp.ui.adapters.NearbyDeviceDataAdapter;
 import com.melisa.innovamotionapp.ui.viewmodels.BtSettingsViewModel;
-import com.melisa.innovamotionapp.utils.GlobalData;
+import com.melisa.innovamotionapp.utils.Logger;
 
-public class BtSettingsActivity extends AppCompatActivity {
+public class BtSettingsActivity extends BaseActivity {
 
-    private static final String TAG = "BtSettingsActivity";
     private BtSettingsActivityBinding binding;
     private BtSettingsViewModel viewModel;
     private MaterialButton signOutButton;
-    private final GlobalData globalData = GlobalData.getInstance();
     private final ActivityResultLauncher<Intent> enableBluetoothLauncher = registerForActivityResult(
             new ActivityResultContracts.StartActivityForResult(), this::processEnableBluetoothResponse);
     private AlertDialog locationDialog = null;
 
 
     @Override
-    protected void onCreate(Bundle savedInstanceState) {
-        super.onCreate(savedInstanceState);
+    protected void onBaseCreate(@Nullable Bundle savedInstanceState) {
         binding = BtSettingsActivityBinding.inflate(getLayoutInflater());
         setContentView(binding.getRoot());
 
@@ -70,7 +65,7 @@ public class BtSettingsActivity extends AppCompatActivity {
         viewModel.checkBluetoothState();
         updateUI(BtSettingsState.BEFORE_BTN_PRESSED);
         
-        Log.d(TAG, "BtSettingsActivity created successfully");
+        Logger.i(TAG, "BtSettingsActivity UI initialized successfully");
     }
 
     private void setupObservers() {
@@ -94,17 +89,19 @@ public class BtSettingsActivity extends AppCompatActivity {
             binding.deviceListRecyclerView.setAdapter(adapter);
         });
 
-        GlobalData.getInstance().getIsConnectedDevice().observe(this, isConnected -> {
+        globalData.getIsConnectedDevice().observe(this, isConnected -> {
 
             if (isConnected) {
-                String deviceConnected = GlobalData.getInstance().deviceCommunicationManager.getDeviceToConnect().getAddress();
-                GlobalData.getInstance().userDeviceSettingsStorage.saveLatestDeviceAddress(deviceConnected);
+                String deviceConnected = globalData.deviceCommunicationManager.getDeviceToConnect().getAddress();
+                globalData.userDeviceSettingsStorage.saveLatestDeviceAddress(deviceConnected);
+                
+                Logger.bluetooth(TAG, deviceConnected, "Device connected successfully");
 
                 // Navigate to the next screen or update UI
                 launchBtConnectedActivity();
             } else {
                 // Handle the disconnected state if necessary
-                Log.d("ServiceState", "Service is disconnected.");
+                Logger.d(TAG, "Service is disconnected");
             }
         });
     }
@@ -141,7 +138,7 @@ public class BtSettingsActivity extends AppCompatActivity {
             case BEFORE_BTN_PRESSED: // On activity initialisation
                 binding.inputChildName.setEnabled(true);
                 binding.btConnection.setEnabled(false);
-                binding.inputChildName.setText(GlobalData.getInstance().userDeviceSettingsStorage.getLatestUser());
+                binding.inputChildName.setText(globalData.userDeviceSettingsStorage.getLatestUser());
                 break;
 
             case AFTER_BTN_PRESSED:
@@ -198,12 +195,11 @@ public class BtSettingsActivity extends AppCompatActivity {
     }
 
     private void processEnableBluetoothResponse(ActivityResult activityResult) {
-        if (activityResult.getResultCode() == AppCompatActivity.RESULT_OK) {
-
-            log("Bluetooth enabled successfully");
+        if (activityResult.getResultCode() == RESULT_OK) {
+            logAndToast("Bluetooth enabled successfully");
             viewModel.startBluetoothDiscovery();
         } else {
-            log("Failed to enable Bluetooth");
+            logErrorAndNotifyUser("Failed to enable Bluetooth", "Bluetooth is required for device connection", null);
         }
     }
 
@@ -218,17 +214,12 @@ public class BtSettingsActivity extends AppCompatActivity {
         return false;
     }
 
-    public void log(String msg) {
-        Log.d(TAG, msg);
-        Toast.makeText(this, msg, Toast.LENGTH_SHORT).show();
-    }
+
 
 
     private void launchBtConnectedActivity() {
-        // Launch the new Activity
-        Intent i = new Intent(this, BtConnectedActivity.class);
-        startActivity(i);
-        finish();
+        Logger.userAction(TAG, "Launching BtConnectedActivity");
+        navigateToActivityAndFinish(BtConnectedActivity.class, null);
     }
 
     @Override
@@ -311,32 +302,7 @@ public class BtSettingsActivity extends AppCompatActivity {
         locationDialog.show();
     }
 
-    /**
-     * Signs out the current user and navigates back to login screen
-     */
-    private void signOut() {
-        Log.d(TAG, "Sign out requested");
-        
-        // Sign out from Firebase
-        FirebaseAuth.getInstance().signOut();
-        
-        // Clear any global data
-        if (globalData != null) {
-            globalData.currentUserRole = null;
-            globalData.currentUserUid = null;
-        }
-        
-        // Show confirmation
-        Toast.makeText(this, "Signed out successfully", Toast.LENGTH_SHORT).show();
-        
-        // Navigate to login activity
-        Intent intent = new Intent(this, LoginActivity.class);
-        intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TASK);
-        startActivity(intent);
-        finish();
-        
-        Log.d(TAG, "User signed out and redirected to login");
-    }
+
 
     @Override
     protected void onPause() {
