@@ -52,6 +52,14 @@ import java.util.concurrent.Executors;
 import java.util.List;
 import java.util.ArrayList;
 
+/**
+ * LoginActivity with online-only sign-in flow that pre-fills user preferences:
+ * 
+ * - For SUPERVISORS: Pre-fills the supervised email field from server data
+ * - For SUPERVISED accounts: Pre-fills the radio button selection from server data  
+ * - Users can edit any pre-filled values before proceeding
+ * - All preferences are fetched fresh from server on each sign-in (no local caching)
+ */
 public class LoginActivity extends AppCompatActivity {
 
     private static final String TAG = "LoginActivity";
@@ -375,13 +383,9 @@ public class LoginActivity extends AppCompatActivity {
                 .addOnSuccessListener(document -> {
                     if (document.exists()) {
                         String role = document.getString("role");
-                        if (role != null && !role.isEmpty()) {
-                            Log.d(TAG, "User found with role: " + role);
-                            navigateToMainActivity();
-            } else {
-                            Log.d(TAG, "User exists but no role set - showing role selection");
-                            showRoleSelectionUI(user);
-                        }
+                        Log.d(TAG, "User found with role: " + (role != null ? role : "none"));
+                        // Always show role selection UI for online-only flow with pre-filling
+                        showRoleSelectionUI(user);
                 } else {
                         Log.d(TAG, "User not found in Firestore - creating profile");
                         createUserProfile(user);
@@ -391,6 +395,90 @@ public class LoginActivity extends AppCompatActivity {
             Log.e(TAG, "Error checking user in Firestore", e);
                     handleFirestoreError(e);
                 });
+    }
+
+    private void fetchAndPreFillUserPreferences(FirebaseUser user) {
+        Log.d(TAG, "Fetching user preferences from server for UID: " + user.getUid());
+        showLoading(getString(R.string.loading_preferences));
+        
+        DocumentReference userRef = db.collection("users").document(user.getUid());
+        userRef.get()
+                .addOnSuccessListener(document -> {
+                    if (document.exists()) {
+                        String role = document.getString("role");
+                        String supervisedEmail = document.getString("supervisedEmail");
+                        String lastSelectedRole = document.getString("lastSelectedRole");
+                        
+                        Log.d(TAG, "Retrieved preferences - role: " + role + 
+                               ", supervisedEmail: " + supervisedEmail + 
+                               ", lastSelectedRole: " + lastSelectedRole);
+                        
+                        runOnUiThread(() -> {
+                            hideLoading();
+                            
+                            // Pre-fill based on user type
+                            if ("supervisor".equals(role) && supervisedEmail != null && !supervisedEmail.isEmpty()) {
+                                // Pre-fill supervised email for supervisors
+                                preFillSupervisedEmail(supervisedEmail);
+                                roleSupervisor.setChecked(true);
+                                supervisedEmailLayout.setVisibility(View.VISIBLE);
+                                Log.d(TAG, "Pre-filled supervised email for supervisor: " + supervisedEmail);
+                            } else if ("supervised".equals(role)) {
+                                // Pre-fill role selection for supervised accounts
+                                roleSupervised.setChecked(true);
+                                supervisedEmailLayout.setVisibility(View.GONE);
+                                Log.d(TAG, "Pre-filled supervised role selection");
+                            } else if (lastSelectedRole != null) {
+                                // Pre-fill last selected role for users without a set role
+                                if ("supervisor".equals(lastSelectedRole)) {
+                                    roleSupervisor.setChecked(true);
+                                    supervisedEmailLayout.setVisibility(View.VISIBLE);
+                                    if (supervisedEmail != null && !supervisedEmail.isEmpty()) {
+                                        preFillSupervisedEmail(supervisedEmail);
+                                    }
+                                } else {
+                                    roleSupervised.setChecked(true);
+                                    supervisedEmailLayout.setVisibility(View.GONE);
+                                }
+                                Log.d(TAG, "Pre-filled last selected role: " + lastSelectedRole);
+                            } else {
+                                // Default to supervised if no preferences found
+                                roleSupervised.setChecked(true);
+                                supervisedEmailLayout.setVisibility(View.GONE);
+                                Log.d(TAG, "No preferences found, defaulting to supervised role");
+                            }
+                        });
+                    } else {
+                        Log.d(TAG, "No user document found, using defaults");
+                        runOnUiThread(() -> {
+                            hideLoading();
+                            roleSupervised.setChecked(true);
+                            supervisedEmailLayout.setVisibility(View.GONE);
+                        });
+                    }
+                })
+                .addOnFailureListener(e -> {
+                    Log.w(TAG, "Error fetching user preferences: " + e.getMessage(), e);
+                    runOnUiThread(() -> {
+                        hideLoading();
+                        // Continue with defaults if fetch fails
+                        roleSupervised.setChecked(true);
+                        supervisedEmailLayout.setVisibility(View.GONE);
+                        showErrorToast(getString(R.string.preferences_load_failed));
+                    });
+                });
+    }
+
+    private void preFillSupervisedEmail(String email) {
+        if (supervisedEmailInput != null && email != null && !email.isEmpty()) {
+            // Set flag to prevent triggering search when setting text programmatically
+            isSettingTextProgrammatically = true;
+            supervisedEmailInput.setText(email);
+            supervisedEmailInput.setSelection(email.length());
+            isSettingTextProgrammatically = false;
+            supervisedEmailLayout.setError(null);
+            Log.d(TAG, "Pre-filled supervised email field with: " + email);
+        }
     }
 
     private void createUserProfile(FirebaseUser user) {
@@ -419,19 +507,15 @@ public class LoginActivity extends AppCompatActivity {
     private void showRoleSelectionUI(FirebaseUser user) {
         Log.d(TAG, "Showing role selection UI for: " + user.getEmail());
         runOnUiThread(() -> {
-            hideLoading();
             googleSignInButton.setVisibility(View.GONE);
             signedInSection.setVisibility(View.VISIBLE);
             signOutButton.setVisibility(View.VISIBLE);
             
             signedInAsText.setText("Welcome " + user.getDisplayName() + "!\nPlease select your role:");
-            
-            // Set default selection
-            if (roleSupervised != null) {
-                roleSupervised.setChecked(true);
-            }
-            supervisedEmailLayout.setVisibility(View.GONE);
         });
+        
+        // Fetch and pre-fill user preferences from server
+        fetchAndPreFillUserPreferences(user);
     }
 
     private void showSignInUI() {
@@ -499,15 +583,16 @@ public class LoginActivity extends AppCompatActivity {
 
         Map<String, Object> updates = new HashMap<>();
         updates.put("role", role);
+        updates.put("lastSelectedRole", role); // Save for future pre-filling
         updates.put("lastSignIn", System.currentTimeMillis());
-        if (supervisedEmail != null) {
+        if (supervisedEmail != null && !supervisedEmail.isEmpty()) {
             updates.put("supervisedEmail", supervisedEmail);
         }
 
         db.collection("users").document(user.getUid())
                 .update(updates)
                 .addOnSuccessListener(aVoid -> {
-                    Log.d(TAG, "User role saved successfully");
+                    Log.d(TAG, "User role and preferences saved successfully");
                     showSuccessToast("Role set successfully!");
                     navigateToMainActivity();
                 })

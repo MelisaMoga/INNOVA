@@ -94,4 +94,6 @@
     <string name="role_required">Please select an account type</string>
     <string name="supervised_email_required">Please enter the supervised Gmail address</string>
     <string name="role_set_success">Account type saved</string>
+    <string name="loading_preferences">Loading your preferences...</string>
+    <string name="preferences_load_failed">Could not load preferences, using defaults</string>
 </resources>
