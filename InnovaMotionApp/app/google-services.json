@@ -12,7 +12,20 @@
           "package_name": "com.melisa.innovamotionapp"
         }
       },
-      "oauth_client": [],
+      "oauth_client": [
+        {
+          "client_id": "398515951058-n5kk9p43g06q5jaj5u2ou0jnbf7sobq2.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.melisa.innovamotionapp",
+            "certificate_hash": "a852f728f647c9784196d416854bf9ff44fb3bc4"
+          }
+        },
+        {
+          "client_id": "398515951058-g0m0eu210o6rmifbqjvdsra31lht8g8f.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
       "api_key": [
         {
           "current_key": "AIzaSyAjxq82b_7UCH-B1ufCO3ePEyb952xXVrQ"
@@ -20,7 +33,12 @@
       ],
       "services": {
         "appinvite_service": {
-          "other_platform_oauth_client": []
+          "other_platform_oauth_client": [
+            {
+              "client_id": "398515951058-1ioolsnd4fr4sp9aa8239st5kt42cn4u.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
         }
       }
     }

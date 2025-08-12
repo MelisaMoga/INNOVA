@@ -1,11 +1,11 @@
 plugins {
     alias(libs.plugins.android.application)
-    id("com.google.gms.google-services")
+    alias(libs.plugins.google.gms.google.services)
 }
 
 android {
     namespace = "com.melisa.innovamotionapp"
-    compileSdk = 34
+    compileSdk = 35
 
     defaultConfig {
         applicationId = "com.melisa.innovamotionapp"
@@ -33,7 +33,6 @@ android {
 }
 
 dependencies {
-
     implementation(libs.appcompat)
     implementation(libs.material)
     implementation(libs.activity)
@@ -51,9 +50,20 @@ dependencies {
     androidTestImplementation(libs.espresso.core)
     // https://mvnrepository.com/artifact/com.github.PhilJay/MPAndroidChart
     implementation(libs.mpandroidchart)
-    implementation(libs.firebase.bom)
-    implementation(libs.firebase.analytics)
+
+
+
+    // Firebase BOM - manages all Firebase library versions
+    implementation(platform(libs.firebase.bom))
     implementation(libs.firebase.auth)
     implementation(libs.firebase.firestore)
-    implementation(libs.firebase.messaging)
+
+    // Google Play Services BOM - manages all Play Services library versions
+    implementation(libs.credentials)
+    implementation(libs.credentials.play.services.auth)
+    implementation(libs.googleid)
+
+    testImplementation(libs.junit)
+    androidTestImplementation(libs.ext.junit)
+    androidTestImplementation(libs.espresso.core)
 }

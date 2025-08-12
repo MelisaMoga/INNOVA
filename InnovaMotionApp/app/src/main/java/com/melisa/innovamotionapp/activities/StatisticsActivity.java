@@ -68,7 +68,7 @@ public class StatisticsActivity extends AppCompatActivity {
 
         // Setting click listener for the date picker button
         binding.dateRangePickerButton.setOnClickListener(view -> datePickerDialog());
-
+        
         // DEFAULT BEHAVIOUR
         // Fetch all data from the database
         viewModel.getDataForDevice().observe(this, receivedBtDataEntities -> {

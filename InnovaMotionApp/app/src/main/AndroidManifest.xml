@@ -1,6 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:tools="http://schemas.android.com/tools">
+    <uses-permission android:name="android.permission.INTERNET" />
 
 
     <!-- Request legacy Bluetooth permissions for devices on API 29,30. -->
@@ -62,7 +63,7 @@
             android:exported="false"
             android:windowSoftInputMode="adjustNothing"/>
         <activity
-            android:name="._login.login.LoginActivity"
+            android:name="com.melisa.innovamotionapp._login.login.LoginActivity"
             android:exported="false"
             android:label="@string/title_activity_login" />
         <activity

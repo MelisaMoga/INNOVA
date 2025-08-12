@@ -79,4 +79,21 @@
     <string name="invalid_username">Not a valid username</string>
     <string name="invalid_password">Password must be >5 characters</string>
     <string name="login_failed">"Login failed"</string>
+    <string name="sign_in_with_google">Sign in with Google</string>
+    <string name="sign_out">Sign out</string>
+    <string name="signed_in_as_placeholder">Signed in</string>
+    <string name="supervised_email_hint">Supervised Gmail address</string>
+    <string name="add_supervised">Add supervised account</string>
+    <string name="invalid_email">Please enter a valid Gmail address</string>
+    <string name="supervised_added">Supervised account added</string>
+    <string name="supervised_failed">Failed to add supervised account</string>
+    <string name="choose_account_type">Choose account type</string>
+    <string name="role_supervisor">Supervisor</string>
+    <string name="role_supervised">Supervised</string>
+    <string name="proceed">Continue</string>
+    <string name="role_required">Please select an account type</string>
+    <string name="supervised_email_required">Please enter the supervised Gmail address</string>
+    <string name="role_set_success">Account type saved</string>
+    <string name="loading_preferences">Loading your preferences...</string>
+    <string name="preferences_load_failed">Could not load preferences, using defaults</string>
 </resources>

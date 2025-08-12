@@ -31,6 +31,8 @@ public class GlobalData extends Application {
     public UserDeviceSettingsStorage userDeviceSettingsStorage;
     private final MutableLiveData<Posture> receivedPosture = new MutableLiveData<>();
     private final MutableLiveData<Boolean> isConnectedDevice = new MutableLiveData<>();
+    public String currentUserRole = null; // "admin" or "simple_user"
+    public String currentUserUid = null;
 
     public MutableLiveData<Boolean> getIsConnectedDevice() {
         return isConnectedDevice;

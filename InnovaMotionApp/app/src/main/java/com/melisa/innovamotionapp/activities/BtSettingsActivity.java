@@ -29,7 +29,10 @@ import androidx.annotation.RequiresApi;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.lifecycle.ViewModelProvider;
 
+import com.google.firebase.auth.FirebaseAuth;
+import com.google.android.material.button.MaterialButton;
 import com.melisa.innovamotionapp.R;
+import com.melisa.innovamotionapp._login.login.LoginActivity;
 import com.melisa.innovamotionapp.databinding.BtSettingsActivityBinding;
 import com.melisa.innovamotionapp.ui.adapters.NearbyDeviceDataAdapter;
 import com.melisa.innovamotionapp.ui.viewmodels.BtSettingsViewModel;
@@ -37,9 +40,11 @@ import com.melisa.innovamotionapp.utils.GlobalData;
 
 public class BtSettingsActivity extends AppCompatActivity {
 
+    private static final String TAG = "BtSettingsActivity";
     private BtSettingsActivityBinding binding;
     private BtSettingsViewModel viewModel;
-    //    private final GlobalData globalData = GlobalData.getInstance();
+    private MaterialButton signOutButton;
+    private final GlobalData globalData = GlobalData.getInstance();
     private final ActivityResultLauncher<Intent> enableBluetoothLauncher = registerForActivityResult(
             new ActivityResultContracts.StartActivityForResult(), this::processEnableBluetoothResponse);
     private AlertDialog locationDialog = null;
@@ -54,6 +59,9 @@ public class BtSettingsActivity extends AppCompatActivity {
         // Initialize ViewModel
         viewModel = new ViewModelProvider(this).get(BtSettingsViewModel.class);
 
+        // Initialize sign out button
+        signOutButton = findViewById(R.id.sign_out_button);
+        signOutButton.setOnClickListener(v -> signOut());
 
         // Observe LiveData from ViewModel
         setupObservers();
@@ -61,6 +69,8 @@ public class BtSettingsActivity extends AppCompatActivity {
 
         viewModel.checkBluetoothState();
         updateUI(BtSettingsState.BEFORE_BTN_PRESSED);
+        
+        Log.d(TAG, "BtSettingsActivity created successfully");
     }
 
     private void setupObservers() {
@@ -301,6 +311,32 @@ public class BtSettingsActivity extends AppCompatActivity {
         locationDialog.show();
     }
 
+    /**
+     * Signs out the current user and navigates back to login screen
+     */
+    private void signOut() {
+        Log.d(TAG, "Sign out requested");
+        
+        // Sign out from Firebase
+        FirebaseAuth.getInstance().signOut();
+        
+        // Clear any global data
+        if (globalData != null) {
+            globalData.currentUserRole = null;
+            globalData.currentUserUid = null;
+        }
+        
+        // Show confirmation
+        Toast.makeText(this, "Signed out successfully", Toast.LENGTH_SHORT).show();
+        
+        // Navigate to login activity
+        Intent intent = new Intent(this, LoginActivity.class);
+        intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TASK);
+        startActivity(intent);
+        finish();
+        
+        Log.d(TAG, "User signed out and redirected to login");
+    }
 
     @Override
     protected void onPause() {
