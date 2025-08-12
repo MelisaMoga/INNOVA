@@ -16,7 +16,7 @@
         android:textSize="12sp"
         app:icon="@android:drawable/ic_menu_close_clear_cancel"
         app:iconSize="16dp"
-        style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+        style="@style/Theme.InnovaMotionApp.Button.Secondary"
         app:layout_constraintTop_toTopOf="parent"
         app:layout_constraintEnd_toEndOf="parent" />
 

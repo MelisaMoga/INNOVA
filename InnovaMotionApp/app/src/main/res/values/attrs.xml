@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Custom theme attributes for status colors -->
+    <attr name="colorSuccess" format="color" />
+    <attr name="colorWarning" format="color" />
+</resources>
