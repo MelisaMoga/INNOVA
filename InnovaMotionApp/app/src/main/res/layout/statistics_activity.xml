@@ -16,6 +16,7 @@
         android:text="Statistica pentru ultimul dispozitiv conectat"
         android:textSize="18sp"
         android:textStyle="bold"
+        android:textColor="?attr/colorOnBackground"
         android:gravity="center"
         android:padding="8dp"
         app:layout_constraintTop_toTopOf="parent"

@@ -16,7 +16,7 @@
         android:textSize="12sp"
         app:icon="@android:drawable/ic_menu_close_clear_cancel"
         app:iconSize="16dp"
-        style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+        style="@style/Theme.InnovaMotionApp.Button.Secondary"
         app:layout_constraintTop_toTopOf="parent"
         app:layout_constraintEnd_toEndOf="parent" />
 
@@ -29,50 +29,54 @@
         android:text="@string/app_name"
         android:textSize="28sp"
         android:textStyle="bold"
-        android:textColor="@android:color/black"
+        android:textColor="?attr/colorOnBackground"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintTop_toTopOf="parent" />
 
-    <Button
+    <com.google.android.material.button.MaterialButton
         android:id="@+id/button1"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:onClick="LunchMoniotring"
         android:layout_marginTop="50dp"
         android:text="Monitorizare"
+        style="@style/Theme.InnovaMotionApp.Button"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintTop_toBottomOf="@id/app_title" />
 
-    <Button
+    <com.google.android.material.button.MaterialButton
         android:id="@+id/button2"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:layout_marginTop="16dp"
         android:text="Afisare statistica"
         android:onClick="LaunchStatistics"
+        style="@style/Theme.InnovaMotionApp.Button"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintTop_toBottomOf="@id/button1" />
 
-    <Button
+    <com.google.android.material.button.MaterialButton
         android:id="@+id/button3"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:layout_marginTop="16dp"
         android:text="Afisare activitati"
         android:onClick="LaunchTimelaps"
+        style="@style/Theme.InnovaMotionApp.Button"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintTop_toBottomOf="@id/button2" />
-    <Button
+    <com.google.android.material.button.MaterialButton
         android:id="@+id/button4"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:layout_marginTop="16dp"
         android:text="Consum energetic"
         android:onClick="LaunchEnergyConsumption"
+        style="@style/Theme.InnovaMotionApp.Button"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintTop_toBottomOf="@id/button3" />
