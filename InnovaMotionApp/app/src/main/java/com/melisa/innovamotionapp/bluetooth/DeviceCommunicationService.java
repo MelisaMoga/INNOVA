@@ -20,6 +20,8 @@ import com.melisa.innovamotionapp.data.database.InnovaDatabase;
 import com.melisa.innovamotionapp.data.database.ReceivedBtDataEntity;
 import com.melisa.innovamotionapp.data.posture.Posture;
 import com.melisa.innovamotionapp.data.posture.PostureFactory;
+import com.melisa.innovamotionapp.sync.FirestoreSyncService;
+import com.melisa.innovamotionapp.sync.UserSession;
 import com.melisa.innovamotionapp.utils.Constants;
 import com.melisa.innovamotionapp.utils.GlobalData;
 
@@ -42,6 +44,10 @@ public class DeviceCommunicationService extends Service {
 
         // Init database with current context
         database = InnovaDatabase.getInstance(this);
+        
+        // Initialize Firestore sync service and user session
+        firestoreSyncService = FirestoreSyncService.getInstance(this);
+        userSession = UserSession.getInstance(this);
 
         // Start thread that will save receivedData on each second
         // Start the batch-saving thread
@@ -61,6 +67,27 @@ public class DeviceCommunicationService extends Service {
                     // Save the batch to the database
                     if (!currentBatch.isEmpty()) {
                         database.receivedBtDataDao().insertAll(currentBatch);
+                        
+                        // Sync each message to Firestore if user is supervised and online
+                        // NOTE: syncNewMessage does NOT insert into Room (we already did that above)
+                        for (ReceivedBtDataEntity entity : currentBatch) {
+                            firestoreSyncService.syncNewMessage(entity, new FirestoreSyncService.SyncCallback() {
+                                @Override
+                                public void onSuccess(String message) {
+                                    Log.d(TAG, "Message synced: " + message);
+                                }
+
+                                @Override
+                                public void onError(String error) {
+                                    Log.w(TAG, "Sync error: " + error);
+                                }
+
+                                @Override
+                                public void onProgress(int current, int total) {
+                                    // Not used for single message sync
+                                }
+                            });
+                        }
                     }
                 } catch (InterruptedException e) {
                     Thread.currentThread().interrupt(); // Restore interrupted status
@@ -86,6 +113,10 @@ public class DeviceCommunicationService extends Service {
     private final List<ReceivedBtDataEntity> temporaryReceivedBtDataListToSave = new ArrayList<>();
     private final Object lock = new Object(); // For thread-safe access to the list
     private volatile boolean isBatchSavingRunning = true; // Flag to stop the batch-saving thread
+    
+    // Firestore sync service and user session
+    private FirestoreSyncService firestoreSyncService;
+    private UserSession userSession;
 
     @Override
     public int onStartCommand(Intent intent, int flags, int startId) {
@@ -161,25 +192,33 @@ public class DeviceCommunicationService extends Service {
                 @Override
                 public void onDataReceived(BluetoothDevice device, String receivedData) {
                     Log.d(TAG, "[Service] MSG: " + receivedData);
-                    // Temporary store receivedData into list
+
                     try {
                         fileOutputStream.write((receivedData + "\n").getBytes());
                     } catch (IOException e) {
-                        Log.d(TAG, "ERROR closing input stream", e);
-                    }
-                    ReceivedBtDataEntity receivedBtDataEntity = new ReceivedBtDataEntity(
-                            device.getAddress(),
-                            System.currentTimeMillis(),
-                            receivedData
-                    );
-                    // Add the received data to the list in a thread-safe manner
-                    synchronized (lock) {
-                        temporaryReceivedBtDataListToSave.add(receivedBtDataEntity);
+                        Log.d(TAG, "ERROR writing posture file", e);
                     }
 
-                    // Translate receivedData into Posture
+                    final long now = System.currentTimeMillis();
+
+                    // App policy: user is signed in; Firebase caches UID offline. Fetch UID when supervised.
+                    String ownerUid = null;
+                    if (userSession.isLoaded() && userSession.isSupervised()) {
+                        ownerUid = firestoreSyncService.getCurrentUserId(); // cached UID even offline
+                    }
+
+                    // IMPORTANT: for supervised users, ensure owner_user_id is set at creation time
+                    final ReceivedBtDataEntity entity = (ownerUid != null)
+                            ? new ReceivedBtDataEntity(device.getAddress(), now, receivedData, ownerUid)
+                            : new ReceivedBtDataEntity(device.getAddress(), now, receivedData);
+
+                    // Always enqueue for local persistence (batch thread will insertAll with IGNORE)
+                    synchronized (lock) {
+                        temporaryReceivedBtDataListToSave.add(entity);
+                    }
+
+                    // Keep existing LiveData/UI updates
                     Posture posture = PostureFactory.createPosture(receivedData);
-                    // Update LiveData with received data
                     GlobalData.getInstance().setReceivedPosture(posture);
                 }
 
@@ -241,6 +280,14 @@ public class DeviceCommunicationService extends Service {
         super.onDestroy();
 
         isBatchSavingRunning = false; // Signal the batch-saving thread to stop
+        
+        // Clean up sync service and user session
+        if (firestoreSyncService != null) {
+            firestoreSyncService.cleanup();
+        }
+        if (userSession != null) {
+            userSession.cleanup();
+        }
     }
 
     /**
