@@ -26,6 +26,9 @@ public class GlobalData extends Application {
         
         // Seed a safe default so observers never see null
         receivedPosture.setValue(new UnknownPosture());
+
+        // Single source of truth: init all channels here (both BT + Fall)
+        NotificationConfig.initAllChannels(this);
     }
     
     public static GlobalData getInstance() {

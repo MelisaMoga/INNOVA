@@ -1,6 +1,8 @@
 package com.melisa.innovamotionapp.activities;
 
 import android.content.Intent;
+import android.content.pm.PackageManager;
+import android.os.Build;
 import android.os.Bundle;
 import android.view.View;
 
@@ -30,6 +32,13 @@ public class MainActivity extends BaseActivity {
         signOutButton.setOnClickListener(v -> signOut());
 
         Logger.i(TAG, "MainActivity UI initialized successfully");
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            if (checkSelfPermission(android.Manifest.permission.POST_NOTIFICATIONS)
+                    != PackageManager.PERMISSION_GRANTED) {
+                requestPermissions(new String[]{android.Manifest.permission.POST_NOTIFICATIONS}, 1001);
+            }
+        }
     }
 
     public void LaunchMonitoring(View view) {

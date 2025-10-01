@@ -22,6 +22,7 @@ import com.google.firebase.firestore.WriteBatch;
 import com.melisa.innovamotionapp.data.database.InnovaDatabase;
 import com.melisa.innovamotionapp.data.database.ReceivedBtDataDao;
 import com.melisa.innovamotionapp.data.database.ReceivedBtDataEntity;
+import com.melisa.innovamotionapp.data.posture.Posture;
 
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -1091,6 +1092,8 @@ public class FirestoreSyncService {
      */
     private void handleSupervisorDocumentChanges(List<DocumentChange> documentChanges, String supervisedUserId) {
         List<ReceivedBtDataEntity> entitiesToInsert = new ArrayList<>();
+        long now = System.currentTimeMillis();
+        final long RECENT_MS = 60_000 * 15; // alert only if within 15 minutes
 
         for (DocumentChange change : documentChanges) {
             if (change.getType() == DocumentChange.Type.ADDED || change.getType() == DocumentChange.Type.MODIFIED) {
@@ -1118,6 +1121,25 @@ public class FirestoreSyncService {
                         );
                         entitiesToInsert.add(entity);
                         Log.d(TAG, "New message from supervised user " + supervisedUserId + ": " + entity.getReceivedMsg());
+
+                        // If this looks like a fall AND it's recent, notify on supervisor phone
+                        if (msg != null && ts != null && (now - ts) <= RECENT_MS) {
+                            Posture p = com.melisa.innovamotionapp.data.posture.PostureFactory.createPosture(msg);
+                            if (p instanceof com.melisa.innovamotionapp.data.posture.types.FallingPosture) {
+                                // TODO: optionally resolve a friendly name for supervisedUserId
+                                String who = "Supervised user";
+
+                                // Use your centralized strings + new 3-arg signature
+                                String body = who + " (" + supervisedUserId + ") "
+                                        + context.getString(com.melisa.innovamotionapp.R.string.notif_fall_text_generic);
+
+                                com.melisa.innovamotionapp.utils.AlertNotifications.notifyFall(
+                                        context,
+                                        who,
+                                        body
+                                );
+                            }
+                        }
                     }
                 } catch (Exception e) {
                     Log.e(TAG, "Error processing supervisor document change for " + supervisedUserId, e);

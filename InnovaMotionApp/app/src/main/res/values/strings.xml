@@ -96,4 +96,23 @@
     <string name="role_set_success">Account type saved</string>
     <string name="loading_preferences">Loading your preferences...</string>
     <string name="preferences_load_failed">Could not load preferences, using defaults</string>
+
+    <!-- channels -->
+    <string name="ch_bt_service_name">Bluetooth Service</string>
+    <string name="ch_bt_service_desc">Required while Bluetooth communication service is running</string>
+
+    <string name="ch_fall_alerts_name">Fall Alerts</string>
+    <string name="ch_fall_alerts_desc">Critical posture alerts (falls)</string>
+
+    <!-- service notification texts -->
+    <string name="notif_bt_title_init">InnovaMotion Service</string>
+    <string name="notif_bt_text_starting">Starting…</string>
+    <string name="notif_bt_title_connected">%1$s Connected</string>
+    <string name="notif_bt_text_connected">Communication is ongoing.</string>
+    <string name="notif_bt_title_disconnected">Device disconnected</string>
+    <string name="notif_bt_text_reconnecting">Trying to reconnect…</string>
+
+    <!-- fall notification -->
+    <string name="notif_fall_title">Fall detected</string>
+    <string name="notif_fall_text_generic">A fall may have been detected. Tap to open the app.</string>
 </resources>
