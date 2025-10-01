@@ -124,13 +124,16 @@ public abstract class BaseActivity extends AppCompatActivity {
         Logger.userAction(TAG, "Sign out requested");
         
         try {
+            // Stop all mirrors and clear data before signing out
+            com.melisa.innovamotionapp.sync.FirestoreSyncService.getInstance(this).stopAllMirrors();
+            com.melisa.innovamotionapp.sync.FirestoreSyncService.getInstance(this).clearLocalData();
+            
             // Sign out from Firebase
             FirebaseAuth.getInstance().signOut();
             
-            // Clear any global data
+            // Clear any global data using the new reset method
             if (globalData != null) {
-                globalData.currentUserRole = null;
-                globalData.currentUserUid = null;
+                globalData.resetSessionData();
                 Logger.d(TAG, "Global user data cleared");
             }
             

@@ -45,6 +45,8 @@ import com.google.firebase.firestore.DocumentReference;
 import com.google.firebase.firestore.FirebaseFirestore;
 import com.melisa.innovamotionapp.R;
 import com.melisa.innovamotionapp.activities.MainActivity;
+import com.melisa.innovamotionapp.sync.FirestoreSyncService;
+import com.melisa.innovamotionapp.sync.SessionGate;
 
 import java.util.HashMap;
 import java.util.Map;
@@ -594,6 +596,9 @@ public class LoginActivity extends AppCompatActivity {
                 .addOnSuccessListener(aVoid -> {
                     Log.d(TAG, "User role and preferences saved successfully");
                     showSuccessToast("Role set successfully!");
+
+                    // Initialize SessionGate to handle post-auth bootstrap
+                    SessionGate.getInstance(this);
                     navigateToMainActivity();
                 })
                 .addOnFailureListener(e -> {

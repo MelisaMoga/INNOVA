@@ -33,6 +33,8 @@ import com.melisa.innovamotionapp.data.posture.PostureFactory;
 import com.melisa.innovamotionapp.databinding.StatisticsActivityBinding;
 import com.melisa.innovamotionapp.ui.viewmodels.StatisticsViewModel;
 import com.melisa.innovamotionapp.utils.GlobalData;
+import com.melisa.innovamotionapp.utils.TargetUserResolver;
+import com.melisa.innovamotionapp.sync.UserSession;
 
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
@@ -69,18 +71,35 @@ public class StatisticsActivity extends AppCompatActivity {
         // Setting click listener for the date picker button
         binding.dateRangePickerButton.setOnClickListener(view -> datePickerDialog());
         
-        // DEFAULT BEHAVIOUR
-        // Fetch all data from the database
-        viewModel.getDataForDevice().observe(this, receivedBtDataEntities -> {
-            if (showDefaultData) {
-                if (receivedBtDataEntities != null && !receivedBtDataEntities.isEmpty()) {
-                    // If data is available, find the start and end timestamps
-                    startDate = receivedBtDataEntities.get(0).getTimestamp(); // Set startDate as the timestamp of the first entry
-                    endDate = receivedBtDataEntities.get(receivedBtDataEntities.size() - 1).getTimestamp(); // Set endDate as the timestamp of the last entry
+        // Resolve and set target user once session is loaded
+        if (UserSession.getInstance(getApplicationContext()).isLoaded()) {
+            String target = TargetUserResolver.resolveTargetUserId(getApplicationContext());
+            viewModel.setTargetUserId(target);
+        } else {
+            UserSession.getInstance(getApplicationContext()).loadUserSession(new UserSession.SessionLoadCallback() {
+                @Override
+                public void onSessionLoaded(String userId, String role, java.util.List<String> supervisedUserIds) {
+                    String target = TargetUserResolver.resolveTargetUserId(getApplicationContext());
+                    viewModel.setTargetUserId(target);
+                }
 
-                    // Update UI with the selected date range (formatted)
+                @Override
+                public void onSessionLoadError(String error) {
+                    android.util.Log.w("UI/Stats", "Session load error: " + error);
+                }
+            });
+        }
+
+        viewModel.getAllForUser().observe(this, list -> {
+            if (showDefaultData) {
+                Log.i("UI/Stats", "listSize=" + (list != null ? list.size() : 0));
+                if (list != null && !list.isEmpty()) {
+                    startDate = list.get(0).getTimestamp();
+                    endDate = list.get(list.size() - 1).getTimestamp();
+                    ReceivedBtDataEntity last = list.get(list.size() - 1);
+                    Log.d("UI/Stats", "last ts=" + last.getTimestamp() + " msg=" + last.getReceivedMsg());
                     updateWithDateRange(startDate, endDate);
-                    this.onSavedDataChange(receivedBtDataEntities);
+                    onSavedDataChange(list);
                 }
             }
         });
@@ -234,12 +253,16 @@ public class StatisticsActivity extends AppCompatActivity {
             showDefaultData = false;
 
             // Remove any existing observer before adding a new one
-            viewModel.getDataForDeviceInRange(startDate, endDate).removeObservers(this);
-            // Custom BEHAVIOUR
-            // Observe the data from the ViewModel
-            viewModel.getDataForDeviceInRange(startDate, endDate).observe(this, receivedBtDataEntities -> {
+            viewModel.getRangeForUser(startDate, endDate).removeObservers(this);
+            // RANGE
+            viewModel.getRangeForUser(startDate, endDate).observe(this, list -> {
                 if (!showDefaultData) {
-                    this.onSavedDataChange(receivedBtDataEntities);
+                    Log.i("UI/Stats", "range listSize=" + (list != null ? list.size() : 0));
+                    if (list != null && !list.isEmpty()) {
+                        ReceivedBtDataEntity last = list.get(list.size() - 1);
+                        Log.d("UI/Stats", "range last ts=" + last.getTimestamp() + " msg=" + last.getReceivedMsg());
+                    }
+                    onSavedDataChange(list);
                 }
             });
 
