@@ -16,12 +16,17 @@ import android.util.Log;
 import androidx.core.app.NotificationCompat;
 
 import com.melisa.innovamotionapp.R;
+import com.melisa.innovamotionapp.activities.MainActivity;
 import com.melisa.innovamotionapp.data.database.InnovaDatabase;
 import com.melisa.innovamotionapp.data.database.ReceivedBtDataEntity;
 import com.melisa.innovamotionapp.data.posture.Posture;
 import com.melisa.innovamotionapp.data.posture.PostureFactory;
+import com.melisa.innovamotionapp.sync.FirestoreSyncService;
+import com.melisa.innovamotionapp.sync.UserSession;
+import com.melisa.innovamotionapp.utils.AlertNotifications;
 import com.melisa.innovamotionapp.utils.Constants;
 import com.melisa.innovamotionapp.utils.GlobalData;
+import com.melisa.innovamotionapp.utils.NotificationConfig;
 
 import java.io.File;
 import java.io.FileOutputStream;
@@ -42,6 +47,10 @@ public class DeviceCommunicationService extends Service {
 
         // Init database with current context
         database = InnovaDatabase.getInstance(this);
+        
+        // Initialize Firestore sync service and user session
+        firestoreSyncService = FirestoreSyncService.getInstance(this);
+        userSession = UserSession.getInstance(this);
 
         // Start thread that will save receivedData on each second
         // Start the batch-saving thread
@@ -61,6 +70,27 @@ public class DeviceCommunicationService extends Service {
                     // Save the batch to the database
                     if (!currentBatch.isEmpty()) {
                         database.receivedBtDataDao().insertAll(currentBatch);
+                        
+                        // Sync each message to Firestore if user is supervised and online
+                        // NOTE: syncNewMessage does NOT insert into Room (we already did that above)
+                        for (ReceivedBtDataEntity entity : currentBatch) {
+                            firestoreSyncService.syncNewMessage(entity, new FirestoreSyncService.SyncCallback() {
+                                @Override
+                                public void onSuccess(String message) {
+                                    Log.d(TAG, "Message synced: " + message);
+                                }
+
+                                @Override
+                                public void onError(String error) {
+                                    Log.w(TAG, "Sync error: " + error);
+                                }
+
+                                @Override
+                                public void onProgress(int current, int total) {
+                                    // Not used for single message sync
+                                }
+                            });
+                        }
                     }
                 } catch (InterruptedException e) {
                     Thread.currentThread().interrupt(); // Restore interrupted status
@@ -76,8 +106,6 @@ public class DeviceCommunicationService extends Service {
     }
 
     private DeviceCommunicationThread deviceCommunicationThread; // The connection thread that handles communication with a device
-    private static final int NOTIFICATION_ID = 1;
-    private static final String CHANNEL_ID = "bluetooth_service_channel";
     private int attemptToReconnectCounter = 0;
     private final int MAX_NUM_CONNECTING_CONSECUTIVE_ATTEMPTS = 2;
 
@@ -86,34 +114,24 @@ public class DeviceCommunicationService extends Service {
     private final List<ReceivedBtDataEntity> temporaryReceivedBtDataListToSave = new ArrayList<>();
     private final Object lock = new Object(); // For thread-safe access to the list
     private volatile boolean isBatchSavingRunning = true; // Flag to stop the batch-saving thread
+    
+    // Firestore sync service and user session
+    private FirestoreSyncService firestoreSyncService;
+    private UserSession userSession;
 
     @Override
     public int onStartCommand(Intent intent, int flags, int startId) {
-        // 1. Create Notification Channel (if needed for Android 8.0+)
-        createNotificationChannel();
+        // Foreground start with a neutral/starting state
+        Notification initial = new androidx.core.app.NotificationCompat.Builder(this, NotificationConfig.CHANNEL_BT_SERVICE)
+                .setSmallIcon(R.drawable.baseline_bluetooth_connected_24)
+                .setContentTitle(getString(R.string.notif_bt_title_init))
+                .setContentText(getString(R.string.notif_bt_text_starting))
+                .setOngoing(true)
+                .build();
 
-        // 2. Create Notification
-        Notification notification = createNotification();
-
-        // 3. Start Foreground *immediately*
-        startForeground(NOTIFICATION_ID, notification);
+        startForeground(NotificationConfig.NOTIF_ID_BT_SERVICE, initial);
 
         return START_STICKY; // or START_REDELIVER_INTENT
-    }
-
-    private void createNotificationChannel() {
-        NotificationChannel channel = new NotificationChannel(CHANNEL_ID, "Bluetooth Service Channel", NotificationManager.IMPORTANCE_DEFAULT);
-        NotificationManager manager = getSystemService(NotificationManager.class);
-        manager.createNotificationChannel(channel);
-    }
-
-    private Notification createNotification() {
-        // Build your notification here
-        return new NotificationCompat.Builder(this, CHANNEL_ID)
-                .setContentTitle("InnovaMotion Service")
-                .setContentText("Bluetooth communication service is running")
-                .setSmallIcon(R.drawable.baseline_bluetooth_connected_24)
-                .build();
     }
 
     private final IBinder binder = new LocalBinder();
@@ -139,6 +157,7 @@ public class DeviceCommunicationService extends Service {
             // Create a new connection thread to connect to the Bluetooth device
             deviceCommunicationThread = new DeviceCommunicationThread(device, new DeviceCommunicationThread.DataCallback() {
 
+                @SuppressLint("MissingPermission")
                 @Override
                 public void onConnectionEstablished(BluetoothDevice device) {
                     GlobalData.getInstance().setIsConnectedDevice(true);
@@ -146,41 +165,55 @@ public class DeviceCommunicationService extends Service {
                     // Reset consecutive attempts
                     attemptToReconnectCounter = 0;
 
-                    // Update the foreground notification to indicate the device is connected
-                    @SuppressLint("MissingPermission") Notification notification = new NotificationCompat.Builder(DeviceCommunicationService.this, CHANNEL_ID)
-                            .setContentTitle(device.getName() + " Connected")
-                            .setContentText("Communication is ongoing.")
-                            .setSmallIcon(R.drawable.baseline_bluetooth_connected_24)
-                            .setPriority(NotificationCompat.PRIORITY_LOW)
-                            .build();
-
-                    NotificationManager manager = (NotificationManager) getSystemService(NOTIFICATION_SERVICE);
-                    manager.notify(NOTIFICATION_ID + 1, notification);
+                    // Update the existing foreground notification (don’t create a new one)
+                    updateServiceNotification(
+                            getString(R.string.notif_bt_title_connected, device.getName()),
+                            getString(R.string.notif_bt_text_connected),
+                            R.drawable.baseline_bluetooth_connected_24
+                    );
                 }
 
                 @Override
                 public void onDataReceived(BluetoothDevice device, String receivedData) {
                     Log.d(TAG, "[Service] MSG: " + receivedData);
-                    // Temporary store receivedData into list
+
                     try {
                         fileOutputStream.write((receivedData + "\n").getBytes());
                     } catch (IOException e) {
-                        Log.d(TAG, "ERROR closing input stream", e);
-                    }
-                    ReceivedBtDataEntity receivedBtDataEntity = new ReceivedBtDataEntity(
-                            device.getAddress(),
-                            System.currentTimeMillis(),
-                            receivedData
-                    );
-                    // Add the received data to the list in a thread-safe manner
-                    synchronized (lock) {
-                        temporaryReceivedBtDataListToSave.add(receivedBtDataEntity);
+                        Log.d(TAG, "ERROR writing posture file", e);
                     }
 
-                    // Translate receivedData into Posture
+                    final long now = System.currentTimeMillis();
+
+                    // App policy: user is signed in; Firebase caches UID offline. Fetch UID when supervised.
+                    String ownerUid = null;
+                    if (userSession.isLoaded() && userSession.isSupervised()) {
+                        ownerUid = firestoreSyncService.getCurrentUserId(); // cached UID even offline
+                    }
+
+                    // IMPORTANT: for supervised users, ensure owner_user_id is set at creation time
+                    final ReceivedBtDataEntity entity = (ownerUid != null)
+                            ? new ReceivedBtDataEntity(device.getAddress(), now, receivedData, ownerUid)
+                            : new ReceivedBtDataEntity(device.getAddress(), now, receivedData);
+
+                    // Always enqueue for local persistence (batch thread will insertAll with IGNORE)
+                    synchronized (lock) {
+                        temporaryReceivedBtDataListToSave.add(entity);
+                    }
+
+                    // Keep existing LiveData/UI updates
                     Posture posture = PostureFactory.createPosture(receivedData);
-                    // Update LiveData with received data
                     GlobalData.getInstance().setReceivedPosture(posture);
+
+                    // Notify fall locally (supervised device)
+                    if (posture instanceof com.melisa.innovamotionapp.data.posture.types.FallingPosture) {
+                        String who = (ownerUid != null) ? ownerUid : "you";
+                        AlertNotifications.notifyFall(
+                                DeviceCommunicationService.this,
+                                who,
+                                getString(R.string.notif_fall_text_generic)
+                        );
+                    }
                 }
 
                 @Override
@@ -192,15 +225,12 @@ public class DeviceCommunicationService extends Service {
                         Log.d(TAG, "ERROR closing input stream", e);
                     }
 
-                    // Send notification on disconnect
-                    NotificationManager manager = (NotificationManager) getSystemService(NOTIFICATION_SERVICE);
-                    Notification notification = new NotificationCompat.Builder(DeviceCommunicationService.this, CHANNEL_ID)
-                            .setContentTitle("Bluetooth Device Disconnected")
-                            .setContentText("Your Bluetooth device has been disconnected.")
-                            .setSmallIcon(R.drawable.baseline_bluetooth_disabled_24)
-                            .setPriority(NotificationCompat.PRIORITY_HIGH)
-                            .build();
-                    manager.notify(NOTIFICATION_ID + 1, notification);
+                    // Update the same foreground notification to show we’re reconnecting
+                    updateServiceNotification(
+                            getString(R.string.notif_bt_title_disconnected),
+                            getString(R.string.notif_bt_text_reconnecting),
+                            R.drawable.baseline_bluetooth_disabled_24
+                    );
 
 
                     if (attemptToReconnectCounter >= MAX_NUM_CONNECTING_CONSECUTIVE_ATTEMPTS) {
@@ -241,6 +271,14 @@ public class DeviceCommunicationService extends Service {
         super.onDestroy();
 
         isBatchSavingRunning = false; // Signal the batch-saving thread to stop
+        
+        // Clean up sync service and user session
+        if (firestoreSyncService != null) {
+            firestoreSyncService.cleanup();
+        }
+        if (userSession != null) {
+            userSession.cleanup();
+        }
     }
 
     /**
@@ -248,6 +286,32 @@ public class DeviceCommunicationService extends Service {
      */
     public boolean isDeviceConnected() {
         return deviceCommunicationThread != null && deviceCommunicationThread.isAlive();
+    }
+
+    private void updateServiceNotification(String title, String text, int iconRes) {
+        Intent openIntent = new Intent(this, MainActivity.class)
+                .setAction(NotificationConfig.ACTION_OPEN_FROM_SERVICE);
+
+        android.app.PendingIntent contentPI =
+                androidx.core.app.TaskStackBuilder.create(this)
+                        .addNextIntentWithParentStack(openIntent)
+                        .getPendingIntent(
+                                NotificationConfig.RC_OPEN_FROM_SERVICE,
+                                android.os.Build.VERSION.SDK_INT >= 23
+                                        ? android.app.PendingIntent.FLAG_UPDATE_CURRENT | android.app.PendingIntent.FLAG_IMMUTABLE
+                                        : android.app.PendingIntent.FLAG_UPDATE_CURRENT
+                        );
+
+        Notification notification = new androidx.core.app.NotificationCompat.Builder(this, NotificationConfig.CHANNEL_BT_SERVICE)
+                .setSmallIcon(iconRes)
+                .setContentTitle(title)
+                .setContentText(text)
+                .setOngoing(true)
+                .setContentIntent(contentPI)
+                .build();
+
+        android.app.NotificationManager nm = (android.app.NotificationManager) getSystemService(NOTIFICATION_SERVICE);
+        nm.notify(NotificationConfig.NOTIF_ID_BT_SERVICE, notification); // same ID → replaces in place
     }
 }
 

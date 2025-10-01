@@ -16,6 +16,8 @@ import com.melisa.innovamotionapp.data.posture.PostureFactory;
 import com.melisa.innovamotionapp.databinding.TimelapsActivityBinding;
 import com.melisa.innovamotionapp.ui.viewmodels.TimeLapseViewModel;
 import com.melisa.innovamotionapp.utils.GlobalData;
+import com.melisa.innovamotionapp.utils.TargetUserResolver;
+import com.melisa.innovamotionapp.sync.UserSession;
 
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
@@ -63,19 +65,42 @@ public class TimeLapseActivity extends AppCompatActivity {
         // Boolean init to display data only once
         displayedOnce = false;
 
-        // Observe latestDevice's saved postures
-        viewModel.getDataForLatestDevice().observe(this, receivedBtDataEntities -> {
+        // Resolve and set target user once session is loaded
+        if (UserSession.getInstance(getApplicationContext()).isLoaded()) {
+            String target = TargetUserResolver.resolveTargetUserId(getApplicationContext());
+            android.util.Log.i("UI/TimeLapse", "Resolved targetUserId=" + target);
+            viewModel.setTargetUserId(target);
+        } else {
+            UserSession.getInstance(getApplicationContext()).loadUserSession(new UserSession.SessionLoadCallback() {
+                @Override
+                public void onSessionLoaded(String uid, String role, java.util.List<String> kids) {
+                    String target = TargetUserResolver.resolveTargetUserId(getApplicationContext());
+                    android.util.Log.i("UI/TimeLapse", "Resolved targetUserId=" + target);
+                    viewModel.setTargetUserId(target);
+                }
+
+                @Override
+                public void onSessionLoadError(String error) {
+                    android.util.Log.w("UI/TimeLapse", "Session load error: " + error);
+                }
+            });
+        }
+
+        // Observe target user's saved postures
+        viewModel.getAllForUser().observe(this, list -> {
             if (displayedOnce) {
                 return;
             }
-            if (receivedBtDataEntities != null && !receivedBtDataEntities.isEmpty()) {
+            int size = (list != null ? list.size() : 0);
+            android.util.Log.i("UI/TimeLapse", "listSize=" + size);
+            if (list != null && !list.isEmpty()) {
                 // Boolean set to display data only once
                 displayedOnce = true;
 
 
                 // Display the savedData's dates interval
-                long startDate = receivedBtDataEntities.get(0).getTimestamp(); // Set startDate as the timestamp of the first entry
-                long endDate = receivedBtDataEntities.get(receivedBtDataEntities.size() - 1).getTimestamp(); // Set endDate as the timestamp of the last entry
+                long startDate = list.get(0).getTimestamp(); // Set startDate as the timestamp of the first entry
+                long endDate = list.get(list.size() - 1).getTimestamp(); // Set endDate as the timestamp of the last entry
                 // Format both date and time (dd/MM/yyyy HH:mm:ss)
                 SimpleDateFormat sdf = new SimpleDateFormat("dd/MM/yyyy HH:mm:ss", Locale.getDefault());
                 String startDateString = sdf.format(new Date(startDate));
@@ -85,7 +110,7 @@ public class TimeLapseActivity extends AppCompatActivity {
                 binding.selectedDateRange.setText(selectedDateRange);
 
                 // Add images and corresponding timestamps (this should come from your data)
-                for (ReceivedBtDataEntity receivedBtDataEntity : receivedBtDataEntities) {
+                for (ReceivedBtDataEntity receivedBtDataEntity : list) {
                     // Add posture's picture
                     Posture posture = PostureFactory.createPosture(receivedBtDataEntity.getReceivedMsg());
 

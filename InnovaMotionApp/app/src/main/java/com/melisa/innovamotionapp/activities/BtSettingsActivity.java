@@ -32,9 +32,13 @@ import androidx.lifecycle.ViewModelProvider;
 import com.google.android.material.button.MaterialButton;
 import com.melisa.innovamotionapp.R;
 import com.melisa.innovamotionapp.databinding.BtSettingsActivityBinding;
+import com.melisa.innovamotionapp.sync.SessionGate;
 import com.melisa.innovamotionapp.ui.adapters.NearbyDeviceDataAdapter;
 import com.melisa.innovamotionapp.ui.viewmodels.BtSettingsViewModel;
 import com.melisa.innovamotionapp.utils.Logger;
+import com.melisa.innovamotionapp.utils.RoleProvider;
+
+import java.util.List;
 
 public class BtSettingsActivity extends BaseActivity {
 
@@ -48,6 +52,35 @@ public class BtSettingsActivity extends BaseActivity {
 
     @Override
     protected void onBaseCreate(@Nullable Bundle savedInstanceState) {
+        // Early exit for supervisors: they shouldn't need to scan
+        SessionGate.getInstance(this).waitForSessionReady(new SessionGate.SessionReadyCallback() {
+            @Override
+            public void onSessionReady(String userId, String role, List<String> supervisedUserIds) {
+                runOnUiThread(() -> {
+                    if ("supervisor".equals(role)) {
+                        Logger.d(TAG, "Supervisor detected in BtSettingsActivity: redirecting to BtConnectedActivity");
+                        Intent intent = new Intent(BtSettingsActivity.this, BtConnectedActivity.class);
+                        intent.setFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_SINGLE_TOP);
+                        startActivity(intent);
+                        finish();
+                        return;
+                    }
+                    
+                    // Continue with normal supervised user flow
+                    initializeSupervisedUserUI();
+                });
+            }
+            
+            @Override
+            public void onSessionError(String error) {
+                Logger.e(TAG, "Session not ready: " + error);
+                // Continue with normal flow if session not ready
+                initializeSupervisedUserUI();
+            }
+        });
+    }
+    
+    private void initializeSupervisedUserUI() {
         binding = BtSettingsActivityBinding.inflate(getLayoutInflater());
         setContentView(binding.getRoot());
 
