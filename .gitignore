@@ -1,2 +1,7 @@
 
 DOCS_APP
+*.apk
+InnovaMotionApp/app/release/app-release.apk
+InnovaMotionApp/app/release/baselineProfiles/0/app-release.dm
+InnovaMotionApp/app/release/baselineProfiles/1/app-release.dm
+InnovaMotionApp/app/release/output-metadata.json
