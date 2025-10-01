@@ -46,6 +46,7 @@ import com.google.firebase.firestore.FirebaseFirestore;
 import com.melisa.innovamotionapp.R;
 import com.melisa.innovamotionapp.activities.MainActivity;
 import com.melisa.innovamotionapp.sync.FirestoreSyncService;
+import com.melisa.innovamotionapp.sync.SessionGate;
 
 import java.util.HashMap;
 import java.util.Map;
@@ -595,30 +596,9 @@ public class LoginActivity extends AppCompatActivity {
                 .addOnSuccessListener(aVoid -> {
                     Log.d(TAG, "User role and preferences saved successfully");
                     showSuccessToast("Role set successfully!");
-                    
-                    // Trigger backfill for supervised users after successful role save
-                    if ("supervised".equals(role)) {
-                        Log.d(TAG, "User is supervised, triggering backfill after role save");
-                        FirestoreSyncService.getInstance(this)
-                                .backfillLocalFromCloudForCurrentUser(new FirestoreSyncService.SyncCallback() {
-                                    @Override
-                                    public void onSuccess(String message) {
-                                        Log.i(TAG, "Backfill after role save completed: " + message);
-                                    }
 
-                                    @Override
-                                    public void onError(String error) {
-                                        Log.w(TAG, "Backfill after role save failed: " + error);
-                                        // Don't block navigation on backfill failure
-                                    }
-
-                                    @Override
-                                    public void onProgress(int current, int total) {
-                                        Log.d(TAG, "Backfill progress: " + current + "/" + total);
-                                    }
-                                });
-                    }
-                    
+                    // Initialize SessionGate to handle post-auth bootstrap
+                    SessionGate.getInstance(this);
                     navigateToMainActivity();
                 })
                 .addOnFailureListener(e -> {

@@ -26,9 +26,6 @@ public class GlobalData extends Application {
         
         // Seed a safe default so observers never see null
         receivedPosture.setValue(new UnknownPosture());
-        
-        // Initialize SessionGate to handle post-auth bootstrap
-        SessionGate.getInstance(this);
     }
     
     public static GlobalData getInstance() {
