@@ -1127,18 +1127,38 @@ public class FirestoreSyncService {
                         if (msg != null && ts != null && (now - ts) <= RECENT_MS) {
                             Posture p = com.melisa.innovamotionapp.data.posture.PostureFactory.createPosture(msg);
                             if (p instanceof com.melisa.innovamotionapp.data.posture.types.FallingPosture) {
-                                // TODO: optionally resolve a friendly name for supervisedUserId
-                                String who = "Supervised user";
+                                firestore.collection("users").document(supervisedUserId).get()
+                                        .addOnSuccessListener(documentSnapshot -> {
+                                            String supervisedUserIdentifier = supervisedUserId; // fallback to UID
+                                            if (documentSnapshot.exists()) {
+                                                String email = documentSnapshot.getString("email");
+                                                if (email != null && !email.isEmpty()) {
+                                                    supervisedUserIdentifier = email;
+                                                }
+                                            }
+                                            String who = "Supervised user";
+                                            String body = who + " (" + supervisedUserIdentifier + ") "
+                                                    + context.getString(com.melisa.innovamotionapp.R.string.notif_fall_text_generic);
 
-                                // Use your centralized strings + new 3-arg signature
-                                String body = who + " (" + supervisedUserId + ") "
-                                        + context.getString(com.melisa.innovamotionapp.R.string.notif_fall_text_generic);
+                                            com.melisa.innovamotionapp.utils.AlertNotifications.notifyFall(
+                                                    context,
+                                                    who,
+                                                    body
+                                            );
+                                        })
+                                        .addOnFailureListener(e -> {
+                                            Log.w(TAG, "Could not fetch user email for notification", e);
+                                            // Fallback to using UID
+                                            String who = "Supervised user";
+                                            String body = who + " (" + supervisedUserId + ") "
+                                                    + context.getString(com.melisa.innovamotionapp.R.string.notif_fall_text_generic);
 
-                                com.melisa.innovamotionapp.utils.AlertNotifications.notifyFall(
-                                        context,
-                                        who,
-                                        body
-                                );
+                                            com.melisa.innovamotionapp.utils.AlertNotifications.notifyFall(
+                                                    context,
+                                                    who,
+                                                    body
+                                            );
+                                        });
                             }
                         }
                     }
