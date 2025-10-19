@@ -7,6 +7,35 @@
   "client": [
     {
       "client_info": {
+        "mobilesdk_app_id": "1:398515951058:android:d0a0fa1541739f796fe40b",
+        "android_client_info": {
+          "package_name": "com.googlesignintest"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "398515951058-g0m0eu210o6rmifbqjvdsra31lht8g8f.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAjxq82b_7UCH-B1ufCO3ePEyb952xXVrQ"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "398515951058-1ioolsnd4fr4sp9aa8239st5kt42cn4u.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    },
+    {
+      "client_info": {
         "mobilesdk_app_id": "1:398515951058:android:ef6c4ed2b6f783ba6fe40b",
         "android_client_info": {
           "package_name": "com.melisa.innovamotionapp"
@@ -19,6 +48,14 @@
           "android_info": {
             "package_name": "com.melisa.innovamotionapp",
             "certificate_hash": "a852f728f647c9784196d416854bf9ff44fb3bc4"
+          }
+        },
+        {
+          "client_id": "398515951058-srj49j4lultbkt1avp14jjqqou1p9cf9.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.melisa.innovamotionapp",
+            "certificate_hash": "7b9fa1ebc909207c5df1cfb211cc158bf17f30ce"
           }
         },
         {
