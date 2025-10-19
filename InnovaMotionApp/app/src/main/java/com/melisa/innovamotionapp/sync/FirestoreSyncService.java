@@ -1093,7 +1093,8 @@ public class FirestoreSyncService {
     private void handleSupervisorDocumentChanges(List<DocumentChange> documentChanges, String supervisedUserId) {
         List<ReceivedBtDataEntity> entitiesToInsert = new ArrayList<>();
         long now = System.currentTimeMillis();
-        final long RECENT_MS = 60_000 * 15; // alert only if within 15 minutes
+
+        final long RECENT_MS = 60_000 * 1 * 60 * 24; // alert only if within 24 hours
 
         for (DocumentChange change : documentChanges) {
             if (change.getType() == DocumentChange.Type.ADDED || change.getType() == DocumentChange.Type.MODIFIED) {
