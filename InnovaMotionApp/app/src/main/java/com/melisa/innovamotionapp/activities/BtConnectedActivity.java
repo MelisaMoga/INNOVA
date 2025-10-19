@@ -11,6 +11,7 @@ import androidx.appcompat.app.AppCompatActivity;
 
 import com.melisa.innovamotionapp.data.posture.Posture;
 import com.melisa.innovamotionapp.data.posture.types.UnknownPosture;
+import com.melisa.innovamotionapp.data.posture.types.UnusedFootwearPosture;
 import com.melisa.innovamotionapp.databinding.BtConnectedActivityBinding;
 import com.melisa.innovamotionapp.ui.viewmodels.SupervisorFeedViewModel;
 import com.melisa.innovamotionapp.utils.GlobalData;
@@ -23,6 +24,7 @@ public class BtConnectedActivity extends AppCompatActivity {
     private BtConnectedActivityBinding binding;
     private final GlobalData globalData = GlobalData.getInstance();
     private SupervisorFeedViewModel supervisorFeedViewModel;
+    private boolean isFirstPosture = true;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -64,18 +66,25 @@ public class BtConnectedActivity extends AppCompatActivity {
     public void displayPostureData(Posture livePosture) {
         if (livePosture == null) return; // extra guard
 
-        String postureMessageWithName = getString(livePosture.getTextCode(), globalData.userName);
+        Posture postureToDisplay = livePosture;
+        if (isFirstPosture && postureToDisplay instanceof UnknownPosture) {
+            postureToDisplay = new UnusedFootwearPosture();
+        } else if (!(livePosture instanceof UnknownPosture)) {
+            isFirstPosture = false;
+        }
+
+        String postureMessageWithName = getString(postureToDisplay.getTextCode(), globalData.userName);
         binding.descriptionTextView.setText(postureMessageWithName);
 
-        binding.riskValueTextView.setText(getString(livePosture.getRisc()));
+        binding.riskValueTextView.setText(getString(postureToDisplay.getRisc()));
 
-        if (livePosture instanceof UnknownPosture) {
+        if (postureToDisplay instanceof UnknownPosture) {
             // The posture is an instance of UnknownPosture
             binding.videoView.stopPlayback(); // Stop any ongoing playback
             binding.videoView.setVideoURI(null); // Clear the video content
         } else {
             // Handle other cases
-            String videoPath = "android.resource://" + getPackageName() + "/" + livePosture.getVideoCode();
+            String videoPath = "android.resource://" + getPackageName() + "/" + postureToDisplay.getVideoCode();
             binding.videoView.setVideoPath(videoPath);
             binding.videoView.start(); // Start playing the video
         }
