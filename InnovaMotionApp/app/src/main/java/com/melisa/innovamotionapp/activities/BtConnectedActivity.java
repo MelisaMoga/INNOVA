@@ -25,6 +25,7 @@ public class BtConnectedActivity extends AppCompatActivity {
     private final GlobalData globalData = GlobalData.getInstance();
     private SupervisorFeedViewModel supervisorFeedViewModel;
     private boolean isFirstPosture = true;
+    private Posture currentPosture = null;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -63,6 +64,14 @@ public class BtConnectedActivity extends AppCompatActivity {
 
     }
 
+    @Override
+    protected void onResume() {
+        super.onResume();
+        if (currentPosture != null) {
+            displayPostureData(currentPosture);
+        }
+    }
+
     public void displayPostureData(Posture livePosture) {
         if (livePosture == null) return; // extra guard
 
@@ -72,6 +81,8 @@ public class BtConnectedActivity extends AppCompatActivity {
         } else if (!(livePosture instanceof UnknownPosture)) {
             isFirstPosture = false;
         }
+
+        currentPosture = postureToDisplay;
 
         String postureMessageWithName = getString(postureToDisplay.getTextCode(), globalData.userName);
         binding.descriptionTextView.setText(postureMessageWithName);
