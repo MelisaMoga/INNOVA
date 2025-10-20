@@ -594,12 +594,36 @@ public class LoginActivity extends AppCompatActivity {
         db.collection("users").document(user.getUid())
                 .update(updates)
                 .addOnSuccessListener(aVoid -> {
-                    Log.d(TAG, "User role and preferences saved successfully");
-                    showSuccessToast("Role set successfully!");
-
-                    // Initialize SessionGate to handle post-auth bootstrap
-                    SessionGate.getInstance(this);
-                    navigateToMainActivity();
+                    Log.d(TAG, "✅ User role and preferences saved to Firestore");
+                    
+                    // Show loading while we reload session
+                    showLoading("Loading your account...");
+                    
+                    // NOW reload session and trigger bootstrap with confirmed role
+                    SessionGate.getInstance(this).reloadSessionAndBootstrap(
+                        new SessionGate.SessionReadyCallback() {
+                            @Override
+                            public void onSessionReady(String userId, String confirmedRole, List<String> supervisedUserIds) {
+                                Log.i(TAG, "✅ Session ready with confirmed role: " + confirmedRole);
+                                runOnUiThread(() -> {
+                                    hideLoading();
+                                    showSuccessToast("Role set successfully!");
+                                    navigateToMainActivity();
+                                });
+                            }
+                            
+                            @Override
+                            public void onSessionError(String error) {
+                                Log.e(TAG, "⚠️ Session reload failed: " + error);
+                                runOnUiThread(() -> {
+                                    hideLoading();
+                                    showErrorToast("Session error: " + error);
+                                    // Proceed anyway - user can try again
+                                    navigateToMainActivity();
+                                });
+                            }
+                        }
+                    );
                 })
                 .addOnFailureListener(e -> {
                     Log.e(TAG, "Failed to save user role", e);

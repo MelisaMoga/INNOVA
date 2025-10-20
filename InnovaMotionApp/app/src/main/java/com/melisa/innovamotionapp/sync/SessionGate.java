@@ -26,6 +26,7 @@ public class SessionGate {
     
     // Session state
     private boolean isSessionReady = false;
+    private boolean hasBootstrapped = false; // Track if bootstrap has run
     private String currentUserUid;
     private String currentUserRole;
     private List<String> supervisedUserIds;
@@ -61,7 +62,8 @@ public class SessionGate {
             FirebaseUser user = firebaseAuth.getCurrentUser();
             if (user != null) {
                 Log.d(TAG, "User authenticated: " + user.getUid());
-                handleUserAuthenticated(user);
+                // Only load session data, DO NOT run bootstrap automatically
+                loadSessionDataOnly(user);
             } else {
                 Log.d(TAG, "User signed out");
                 handleUserSignedOut();
@@ -70,43 +72,100 @@ public class SessionGate {
     }
     
     /**
-     * Handle user authentication - load session and start appropriate pipeline
+     * Update cached session data and GlobalData instance
+     * @param userId User ID
+     * @param role User role (supervised or supervisor)
+     * @param supervisedUserIds List of supervised user IDs (empty for supervised users)
      */
-    private void handleUserAuthenticated(FirebaseUser user) {
-        Log.d(TAG, "Loading user session for authenticated user: " + user.getUid());
+    private void updateSessionCache(String userId, String role, List<String> supervisedUserIds) {
+        // Cache session data locally
+        this.currentUserUid = userId;
+        this.currentUserRole = role;
+        this.supervisedUserIds = supervisedUserIds;
+        this.isSessionReady = true;
+        
+        // Update GlobalData singleton with session info
+        GlobalData.getInstance().setCurrentUserUid(userId);
+        GlobalData.getInstance().setCurrentUserRole(role);
+        GlobalData.getInstance().setSupervisedUserIds(supervisedUserIds);
+    }
+    
+    /**
+     * Load session data without triggering bootstrap
+     * This is called by the auth listener to cache user info
+     */
+    private void loadSessionDataOnly(FirebaseUser user) {
+        Log.d(TAG, "Loading session data (without bootstrap) for: " + user.getUid());
         
         userSession.loadUserSession(new UserSession.SessionLoadCallback() {
             @Override
             public void onSessionLoaded(String userId, String role, List<String> supervisedUserIds) {
-                Log.i("SESSION", "ready user=" + userId + " role=" + role + " supervised=" + supervisedUserIds);
-                Log.i(TAG, "Session loaded - User: " + userId + ", Role: " + role + ", Supervised: " + supervisedUserIds);
+                Log.i(TAG, "Session data loaded - User: " + userId + ", Role: " + role + ", Supervised: " + supervisedUserIds);
+                Log.i(TAG, "⚠️ Bootstrap will NOT run automatically - waiting for explicit trigger");
                 
                 // Cache session data
-                SessionGate.this.currentUserUid = userId;
-                SessionGate.this.currentUserRole = role;
-                SessionGate.this.supervisedUserIds = supervisedUserIds;
-                SessionGate.this.isSessionReady = true;
+                updateSessionCache(userId, role, supervisedUserIds);
                 
-                // Update GlobalData with session info
-                GlobalData.getInstance().setCurrentUserUid(userId);
-                GlobalData.getInstance().setCurrentUserRole(role);
-                GlobalData.getInstance().setSupervisedUserIds(supervisedUserIds);
-                
-                // If role==supervisor, log each childUid you'll backfill + mirror
+                // Log supervised users for supervisor role
                 if ("supervisor".equals(role)) {
                     for (String child : supervisedUserIds) {
-                        Log.i("SESSION", "Supervisor will monitor child=" + child);
+                        Log.i("SESSION", "Supervisor's cached supervised user=" + child);
                     }
                 }
                 
-                // Start appropriate pipeline based on role
-                runPostAuthBootstrap(role, supervisedUserIds);
+                // DO NOT run bootstrap here - wait for explicit call
             }
             
             @Override
             public void onSessionLoadError(String error) {
                 Log.e(TAG, "Failed to load user session: " + error);
                 isSessionReady = false;
+                hasBootstrapped = false;
+            }
+        });
+    }
+    
+    /**
+     * Reload session from Firestore and run bootstrap with fresh data
+     * This should be called after the user confirms their role in LoginActivity
+     */
+    public void reloadSessionAndBootstrap(final SessionReadyCallback callback) {
+        Log.i(TAG, "🔄 Reloading session from Firestore and running bootstrap...");
+        
+        FirebaseUser user = auth.getCurrentUser();
+        if (user == null) {
+            Log.e(TAG, "Cannot reload session: user not authenticated");
+            if (callback != null) {
+                callback.onSessionError("User not authenticated");
+            }
+            return;
+        }
+        
+        // Force reload session to get latest data from Firestore
+        userSession.reloadSession(new UserSession.SessionLoadCallback() {
+            @Override
+            public void onSessionLoaded(String userId, String role, List<String> supervisedUserIds) {
+                Log.i("SESSION", "✅ Session reloaded - user=" + userId + " role=" + role + " supervised=" + supervisedUserIds);
+                
+                // Update cached session data
+                updateSessionCache(userId, role, supervisedUserIds);
+                
+                // Now run bootstrap with correct data
+                Log.i(TAG, "🚀 Running post-auth bootstrap with confirmed role: " + role);
+                runPostAuthBootstrap(role, supervisedUserIds);
+                hasBootstrapped = true;
+                
+                if (callback != null) {
+                    callback.onSessionReady(userId, role, supervisedUserIds);
+                }
+            }
+            
+            @Override
+            public void onSessionLoadError(String error) {
+                Log.e(TAG, "Failed to reload session: " + error);
+                if (callback != null) {
+                    callback.onSessionError(error);
+                }
             }
         });
     }
@@ -126,6 +185,7 @@ public class SessionGate {
         
         // Reset session state
         isSessionReady = false;
+        hasBootstrapped = false;
         currentUserUid = null;
         currentUserRole = null;
         supervisedUserIds = null;
@@ -206,6 +266,13 @@ public class SessionGate {
      */
     public boolean isSessionReady() {
         return isSessionReady;
+    }
+    
+    /**
+     * Check if bootstrap has already run
+     */
+    public boolean hasBootstrapped() {
+        return hasBootstrapped;
     }
     
     /**
