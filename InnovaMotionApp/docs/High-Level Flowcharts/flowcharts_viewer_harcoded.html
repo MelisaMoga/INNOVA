@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>High‑Level Flowcharts Viewer</title>
+  <style>
+    :root{
+      --bg: #ffffff; --fg:#111827; --muted:#6b7280; --card:#f9fafb; --border:#e5e7eb;
+      --code:#f7f7f7; --link:#2563eb;
+    }
+    @media (prefers-color-scheme: dark){
+      :root{ --bg:#0b1020; --fg:#ecf0ff; --muted:#9aa3b2; --card:#121933; --border:#26314f; --code:#0e1630; --link:#93c5fd; }
+    }
+    html, body{ height:100%; }
+    body{ margin:0; padding:0; background:var(--bg); color:var(--fg); font:16px/1.5 system-ui, -apple-system, Segoe UI, Roboto, Ubuntu, Cantarell, "Helvetica Neue", Arial, "Noto Sans", sans-serif; }
+    header{ position:sticky; top:0; z-index:10; backdrop-filter:saturate(180%) blur(6px); background:color-mix(in srgb, var(--bg) 85%, transparent); border-bottom:1px solid var(--border); }
+    .wrap{ max-width:1100px; margin:0 auto; padding:16px 20px; }
+    h1{ font-size:clamp(20px, 2.6vw, 28px); margin:8px 0; }
+    h2{ font-size:clamp(18px, 2.2vw, 24px); margin-top:28px; }
+    h3{ font-size:clamp(17px, 2vw, 22px); margin:18px 0 8px; }
+    .card{ background:var(--card); border:1px solid var(--border); border-radius:14px; padding:16px; margin:16px 0; }
+    .muted{ color:var(--muted); }
+    a{ color:var(--link); text-decoration:none; }
+    a:hover{ text-decoration:underline; }
+    .mermaid{ background:var(--bg); border:1px dashed var(--border); border-radius:12px; padding:12px; overflow:auto; }
+    .section{ scroll-margin-top:76px; }
+    .toc{ display:flex; gap:12px; flex-wrap:wrap; }
+    .toc a{ background:var(--card); border:1px solid var(--border); padding:8px 10px; border-radius:999px; }
+    footer{ color:var(--muted); padding:24px 0 40px; }
+  </style>
+  <script type="module">
+    import mermaid from "https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.esm.min.mjs";
+    mermaid.initialize({ startOnLoad: true, theme: (matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'default') });
+  </script>
+</head>
+<body>
+  <header>
+    <div class="wrap">
+      <h1>🔀 High‑Level Flowcharts Viewer</h1>
+      <div class="muted">Tap a section to jump</div>
+      <nav class="toc">
+        <a href="#flow1">Flow 1: Login → MainActivity (Supervised)</a>
+        <a href="#flow2">Flow 2: Login → MainActivity (Supervisor)</a>
+      </nav>
+    </div>
+  </header>
+
+  <main class="wrap">
+    <section id="flow1" class="section">
+      <h2>Flow 1: Login → MainActivity (Supervised User)</h2>
+      <div class="card">
+        <div class="mermaid">
+flowchart TD
+    Start([User opens app]) --> Login[LoginActivity.java]
+    Login --> SignIn[User clicks Google Sign-In button]
+    SignIn --> Auth{Firebase Auth<br/>Successful?}
+    Auth -->|No| ShowError[Show error toast<br/>Stay on LoginActivity]
+    Auth -->|Yes| CheckFirestore[Check user doc in Firestore<br/>Background thread]
+    
+    CheckFirestore --> UserExists{User doc<br/>exists?}
+    UserExists -->|No| CreateProfile[Create user profile<br/>in Firestore]
+    UserExists -->|Yes| ShowRoleUI[Show role selection UI]
+    CreateProfile --> ShowRoleUI
+    
+    ShowRoleUI --> WaitRole[User sees pre-filled<br/>role = supervised]
+    WaitRole --> ClickProceed[User clicks Continue]
+    ClickProceed --> ValidateSupervised{Role validation<br/>passes?}
+    ValidateSupervised -->|No| ShowValidationError[Show error message]
+    ValidateSupervised -->|Yes| SaveRole[Save role to Firestore<br/>Background thread]
+    
+    SaveRole --> SaveSuccess{Save<br/>successful?}
+    SaveSuccess -->|No| ShowSaveError[Show error, re-enable buttons]
+    SaveSuccess -->|Yes| InitSessionGate[SessionGate.getInstance]
+    
+    InitSessionGate --> LoadSession[UserSession loads from Firestore<br/>Background thread]
+    LoadSession --> SessionLoaded{Session<br/>loaded?}
+    SessionLoaded -->|No| SessionError[Log error, session not ready]
+    SessionLoaded -->|Yes| BootstrapSupervised[Run supervised pipeline]
+    
+    BootstrapSupervised --> BackfillSupervised[Backfill own data from cloud<br/>Background thread]
+    BackfillSupervised --> NavMain[Navigate to MainActivity]
+    NavMain --> MainReady[MainActivity ready<br/>User can launch monitoring]
+    MainReady --> LaunchMonitoring[User clicks Launch Monitoring]
+    LaunchMonitoring --> CheckSession{SessionGate<br/>ready?}
+    CheckSession -->|No| FallbackBT[Route to BtSettingsActivity]
+    CheckSession -->|Yes| RouteBT[Route to BtSettingsActivity]
+    
+    RouteBT --> BtSettings[BtSettingsActivity:<br/>Scan for devices]
+    BtSettings --> Connect[User selects device]
+    Connect --> BtConnected[DeviceCommunicationService starts<br/>BtConnectedActivity opens]
+    BtConnected --> End([Bluetooth pipeline active])
+        </div>
+      </div>
+    </section>
+
+    <section id="flow2" class="section">
+      <h2>Flow 2: Login → MainActivity (Supervisor User)</h2>
+      <div class="card">
+        <div class="mermaid">
+flowchart TD
+    Start([User opens app]) --> Login[LoginActivity.java]
+    Login --> SignIn[User clicks Google Sign-In button]
+    SignIn --> Auth{Firebase Auth<br/>Successful?}
+    Auth -->|No| ShowError[Show error toast<br/>Stay on LoginActivity]
+    Auth -->|Yes| CheckFirestore[Check user doc in Firestore<br/>Background thread]
+    
+    CheckFirestore --> UserExists{User doc<br/>exists?}
+    UserExists -->|No| CreateProfile[Create user profile<br/>in Firestore]
+    UserExists -->|Yes| ShowRoleUI[Show role selection UI]
+    CreateProfile --> ShowRoleUI
+    
+    ShowRoleUI --> WaitRole[User sees pre-filled<br/>role = supervisor<br/>email field shown]
+    WaitRole --> TypeEmail[User types/selects<br/>supervised email]
+    TypeEmail --> Autocomplete[Firestore query for<br/>supervised users<br/>Background thread]
+    Autocomplete --> ClickProceed[User clicks Continue]
+    
+    ClickProceed --> ValidateSupervisor{Email validation<br/>passes?}
+    ValidateSupervisor -->|No| ShowValidationError[Show error: email required/invalid]
+    ValidateSupervisor -->|Yes| SaveRole[Save role + supervisedEmail<br/>to Firestore<br/>Background thread]
+    
+    SaveRole --> SaveSuccess{Save<br/>successful?}
+    SaveSuccess -->|No| ShowSaveError[Show error, re-enable buttons]
+    SaveSuccess -->|Yes| InitSessionGate[SessionGate.getInstance]
+    
+    InitSessionGate --> LoadSession[UserSession loads from Firestore<br/>Background thread]
+    LoadSession --> ResolveEmail[Resolve supervised email<br/>to UID<br/>Background thread]
+    ResolveEmail --> SessionLoaded{Session<br/>loaded?}
+    SessionLoaded -->|No| SessionError[Log error, session not ready]
+    SessionLoaded -->|Yes| BootstrapSupervisor[Run supervisor pipeline]
+    
+    BootstrapSupervisor --> PurgeOld[Delete old data<br/>not belonging to<br/>current supervised users]
+    PurgeOld --> BackfillEach[For each supervised UID:<br/>Backfill data from cloud<br/>Background thread]
+    BackfillEach --> StartMirrors[Start real-time mirrors<br/>for each supervised UID]
+    StartMirrors --> NavMain[Navigate to MainActivity]
+    
+    NavMain --> MainReady[MainActivity ready<br/>User can launch monitoring]
+    MainReady --> LaunchMonitoring[User clicks Launch Monitoring]
+    LaunchMonitoring --> CheckSession{SessionGate<br/>ready?}
+    CheckSession -->|No| FallbackBT[Route to BtSettingsActivity]
+    CheckSession -->|Yes| RouteDirect[Skip BT scanning<br/>Route to BtConnectedActivity]
+    
+    RouteDirect --> BtConnected[BtConnectedActivity:<br/>Shows latest posture<br/>from Room database]
+    BtConnected --> End([Monitoring active<br/>Real-time updates via mirrors])
+        </div>
+      </div>
+    </section>
+
+    <footer>
+      <p class="muted">This viewer renders Mermaid diagrams client-side. Works online; for offline use, bundle the Mermaid script locally.</p>
+    </footer>
+  </main>
+</body>
+</html>
