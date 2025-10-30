@@ -44,7 +44,7 @@ import java.util.concurrent.TimeUnit;
  */
 public class FirestoreSyncService {
     private static final String TAG = "FirestoreSyncService";
-    private static final String COLLECTION_BT_DATA = "bluetooth_messages";
+    private static final String COLLECTION_BT_DATA = "posture_messages"; // Multi-user collection (was "bluetooth_messages")
     private static final int BATCH_SIZE = 500; // Firestore batch write limit
     private static final int SUPERVISOR_SYNC_INTERVAL_SECONDS = 10; // Polling interval for supervisor
     
@@ -158,68 +158,83 @@ public class FirestoreSyncService {
     }
 
     /**
-     * Sync a new message immediately if user is supervised and online
-     * NOTE: This method does NOT insert into Room - it only syncs to Firestore
+     * Batch sync messages to Firestore (for packet-based multi-user architecture).
+     * This is the preferred method for aggregators.
+     * 
+     * @param entities List of entities to sync
+     * @param aggregatorId The aggregator account ID
+     * @param callback Sync callback for progress/success/error
      */
-    public void syncNewMessage(ReceivedBtDataEntity entity, SyncCallback callback) {
+    public void batchSyncMessages(List<ReceivedBtDataEntity> entities, String aggregatorId, SyncCallback callback) {
+        if (entities == null || entities.isEmpty()) {
+            callback.onSuccess("No messages to sync");
+            return;
+        }
+        
         if (!isUserAuthenticated()) {
             callback.onError("User not authenticated");
             return;
         }
-
-        if (!userSession.isLoaded()) {
-            Log.w(TAG, "User session not loaded, skipping sync");
-            callback.onError("User session not loaded");
-            return;
-        }
-
-        if (!userSession.isSupervised()) {
-            Log.d(TAG, "User is not supervised, skipping Firestore sync");
-            callback.onSuccess("User is not supervised, no sync needed");
-            return;
-        }
-
+        
         if (!connectivityMonitor.isConnected()) {
-            Log.d(TAG, "No connectivity, message will be synced when online");
-            callback.onSuccess("Message saved locally, will sync when online");
+            Log.d(TAG, "No connectivity, batch will be synced when online");
+            callback.onError("No connectivity");
             return;
         }
-
+        
         executorService.execute(() -> {
-            syncSingleMessageToFirestore(entity, callback);
+            batchWriteToFirestore(aggregatorId, entities, callback);
         });
     }
-
+    
     /**
-     * Sync a single message to Firestore
+     * Batch write entities to Firestore using WriteBatch for efficiency.
+     * Thread: Background (ExecutorService)
      */
-    private void syncSingleMessageToFirestore(ReceivedBtDataEntity entity, SyncCallback callback) {
-        FirebaseUser user = auth.getCurrentUser();
-        if (user == null) {
-            // Defensive guard: we never upload if no authenticated user; data is already in Room.
-            callback.onError("User not authenticated (offline token unavailable); kept locally");
-            return;
+    private void batchWriteToFirestore(String aggregatorId, List<ReceivedBtDataEntity> entities, SyncCallback callback) {
+        int totalBatches = (int) Math.ceil((double) entities.size() / BATCH_SIZE);
+        int completedBatches = 0;
+
+        Log.i(TAG, "Starting batch upload of " + entities.size() + " messages in " + totalBatches + " batches");
+
+        for (int i = 0; i < entities.size(); i += BATCH_SIZE) {
+            int endIndex = Math.min(i + BATCH_SIZE, entities.size());
+            List<ReceivedBtDataEntity> batch = entities.subList(i, endIndex);
+            
+            WriteBatch writeBatch = firestore.batch();
+            
+            for (ReceivedBtDataEntity entity : batch) {
+                // Use new multi-user constructor: childId, aggregatorId, deviceAddress, timestamp, receivedMsg
+                FirestoreDataModel firestoreModel = new FirestoreDataModel(
+                    entity.getOwnerUserId(),  // childId
+                    aggregatorId,              // aggregatorId
+                    entity.getDeviceAddress(),
+                    entity.getTimestamp(),
+                    entity.getReceivedMsg()
+                );
+                
+                String documentId = firestoreModel.getDocumentId();
+                writeBatch.set(
+                    firestore.collection(COLLECTION_BT_DATA).document(documentId),
+                    firestoreModel.toFirestoreDocument()
+                );
+            }
+
+            final int batchNumber = (i / BATCH_SIZE) + 1;
+            writeBatch.commit()
+                    .addOnSuccessListener(aVoid -> {
+                        Log.d(TAG, "Batch " + batchNumber + "/" + totalBatches + " synced successfully (" + batch.size() + " messages)");
+                        callback.onProgress(batchNumber, totalBatches);
+                        
+                        if (batchNumber == totalBatches) {
+                            callback.onSuccess("All " + entities.size() + " messages synced successfully");
+                        }
+                    })
+                    .addOnFailureListener(e -> {
+                        Log.e(TAG, "Failed to sync batch " + batchNumber, e);
+                        callback.onError("Failed to sync batch " + batchNumber + ": " + e.getMessage());
+                    });
         }
-
-        FirestoreDataModel firestoreModel = new FirestoreDataModel(
-            entity.getDeviceAddress(),
-            entity.getTimestamp(),
-            entity.getReceivedMsg(),
-            user.getUid()
-        );
-
-        String documentId = firestoreModel.getDocumentId();
-        firestore.collection(COLLECTION_BT_DATA)
-                .document(documentId)
-                .set(firestoreModel.toFirestoreDocument())
-                .addOnSuccessListener(aVoid -> {
-                    Log.d(TAG, "Message synced to Firestore: " + documentId);
-                    callback.onSuccess("Message synced successfully");
-                })
-                .addOnFailureListener(e -> {
-                    Log.e(TAG, "Failed to sync message to Firestore", e);
-                    callback.onError("Failed to sync to Firestore: " + e.getMessage());
-                });
     }
 
     /**
@@ -310,78 +325,6 @@ public class FirestoreSyncService {
                     Log.e(TAG, "Failed to check existing documents", e);
                     callback.onError("Failed to check existing data: " + e.getMessage());
                 });
-    }
-
-    /**
-     * Batch write documents to Firestore
-     */
-    private void batchWriteToFirestore(String userId, List<ReceivedBtDataEntity> entities, SyncCallback callback) {
-        int totalBatches = (int) Math.ceil((double) entities.size() / BATCH_SIZE);
-        int completedBatches = 0;
-
-        for (int i = 0; i < entities.size(); i += BATCH_SIZE) {
-            int endIndex = Math.min(i + BATCH_SIZE, entities.size());
-            List<ReceivedBtDataEntity> batch = entities.subList(i, endIndex);
-            
-            WriteBatch writeBatch = firestore.batch();
-            
-            for (ReceivedBtDataEntity entity : batch) {
-                FirestoreDataModel firestoreModel = new FirestoreDataModel(
-                    entity.getDeviceAddress(),
-                    entity.getTimestamp(),
-                    entity.getReceivedMsg(),
-                    userId
-                );
-                
-                String documentId = firestoreModel.getDocumentId();
-                writeBatch.set(firestore.collection(COLLECTION_BT_DATA).document(documentId),
-                              firestoreModel.toFirestoreDocument());
-            }
-
-            final int batchNumber = (i / BATCH_SIZE) + 1;
-            writeBatch.commit()
-                    .addOnSuccessListener(aVoid -> {
-                        Log.d(TAG, "Batch " + batchNumber + "/" + totalBatches + " synced successfully");
-                        callback.onProgress(batchNumber, totalBatches);
-                        
-                        if (batchNumber == totalBatches) {
-                            callback.onSuccess("All " + entities.size() + " messages synced successfully");
-                        }
-                    })
-                    .addOnFailureListener(e -> {
-                        Log.e(TAG, "Failed to sync batch " + batchNumber, e);
-                        callback.onError("Failed to sync batch " + batchNumber + ": " + e.getMessage());
-                    });
-        }
-    }
-
-    /**
-     * Start supervisor sync - downloads messages from supervised users
-     * @deprecated Use startSupervisorMirrors() instead
-     */
-    @Deprecated
-    private void startSupervisorSync() {
-        if (isSupervisorSyncActive) {
-            Log.d(TAG, "Supervisor sync already active");
-            return;
-        }
-
-        if (!userSession.isSupervisor()) {
-            Log.w(TAG, "User is not supervisor, cannot start supervisor sync");
-            return;
-        }
-
-        List<String> supervisedUserIds = userSession.getSupervisedUserIds();
-        if (supervisedUserIds.isEmpty()) {
-            Log.w(TAG, "No supervised users found, cannot start supervisor sync");
-            return;
-        }
-
-        Log.i(TAG, "Starting supervisor sync for " + supervisedUserIds.size() + " supervised users");
-        isSupervisorSyncActive = true;
-
-        // Start mirrors for each supervised user
-        startSupervisorMirrors(supervisedUserIds);
     }
 
     /**

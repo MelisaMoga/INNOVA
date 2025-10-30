@@ -22,6 +22,8 @@ import java.util.concurrent.Executors;
 /**
  * Manages user session information including role and supervised targets.
  * Caches user role and supervised user IDs for efficient sync operations.
+ * For aggregators: manages child registry.
+ * For supervisors: tracks linked aggregator ID.
  */
 public class UserSession {
     private static final String TAG = "UserSession";
@@ -38,6 +40,12 @@ public class UserSession {
     private List<String> supervisedUserIds;
     private boolean isLoaded = false;
     
+    // Child registry manager (for aggregators)
+    private ChildRegistryManager childRegistry;
+    
+    // Linked aggregator ID (for supervisors)
+    private String linkedAggregatorId;
+    
     // Callback interface for session loading
     public interface SessionLoadCallback {
         void onSessionLoaded(String userId, String role, List<String> supervisedUserIds);
@@ -49,6 +57,9 @@ public class UserSession {
         this.auth = FirebaseAuth.getInstance();
         this.firestore = FirebaseFirestore.getInstance();
         this.executorService = Executors.newSingleThreadExecutor();
+        
+        // Initialize child registry manager
+        this.childRegistry = new ChildRegistryManager(context);
         
         // Load session data on initialization
         loadUserSession(null);
@@ -113,8 +124,12 @@ public class UserSession {
         
         if ("supervisor".equals(role)) {
             loadSupervisedUserIds(document, callback);
+        } else if ("aggregator".equals(role) || "supervised".equals(role)) {
+            // For aggregators (formerly "supervised"), load child registry
+            supervisedUserIds = new ArrayList<>();
+            loadChildRegistry(userId, callback);
         } else {
-            // For supervised users, no additional data needed
+            // Unknown role or legacy supervised user
             supervisedUserIds = new ArrayList<>();
             isLoaded = true;
             
@@ -130,12 +145,20 @@ public class UserSession {
     private void loadSupervisedUserIds(DocumentSnapshot document, SessionLoadCallback callback) {
         supervisedUserIds = new ArrayList<>();
         
-        // Try to get supervisedUserIds array first
+        // Try to get supervisedUserIds array first (legacy: multiple supervised users)
         @SuppressWarnings("unchecked")
         List<String> userIds = (List<String>) document.get("supervisedUserIds");
         if (userIds != null && !userIds.isEmpty()) {
             supervisedUserIds.addAll(userIds);
             Log.d(TAG, "Found supervisedUserIds: " + supervisedUserIds);
+            
+            // In new architecture, supervisor links to ONE aggregator
+            // So use first ID as linkedAggregatorId
+            if (!supervisedUserIds.isEmpty()) {
+                linkedAggregatorId = supervisedUserIds.get(0);
+                Log.d(TAG, "Linked aggregator ID: " + linkedAggregatorId);
+            }
+            
             isLoaded = true;
             
             if (callback != null) {
@@ -157,6 +180,34 @@ public class UserSession {
                 callback.onSessionLoaded(currentUserId, role, supervisedUserIds);
             }
         }
+    }
+    
+    /**
+     * Load child registry for aggregator role
+     */
+    private void loadChildRegistry(String aggregatorId, SessionLoadCallback callback) {
+        childRegistry.loadRegistry(aggregatorId, new ChildRegistryManager.LoadCallback() {
+            @Override
+            public void onLoaded(List<com.melisa.innovamotionapp.data.models.ChildProfile> children) {
+                Log.i(TAG, "Child registry loaded for aggregator: " + children.size() + " children");
+                isLoaded = true;
+                
+                if (callback != null) {
+                    callback.onSessionLoaded(currentUserId, role, supervisedUserIds);
+                }
+            }
+            
+            @Override
+            public void onError(String error) {
+                Log.e(TAG, "Failed to load child registry: " + error);
+                // Still mark as loaded to not block the app
+                isLoaded = true;
+                
+                if (callback != null) {
+                    callback.onSessionLoaded(currentUserId, role, supervisedUserIds);
+                }
+            }
+        });
     }
     
     /**
@@ -185,6 +236,12 @@ public class UserSession {
                             Log.e(TAG, "Failed to resolve email to UID", task.getException());
                         }
                         
+                        // Set linkedAggregatorId for supervisor
+                        if (!supervisedUserIds.isEmpty()) {
+                            linkedAggregatorId = supervisedUserIds.get(0);
+                            Log.d(TAG, "Linked aggregator ID (resolved): " + linkedAggregatorId);
+                        }
+                        
                         isLoaded = true;
                         if (callback != null) {
                             callback.onSessionLoaded(currentUserId, role, supervisedUserIds);
@@ -194,10 +251,17 @@ public class UserSession {
     }
     
     /**
-     * Check if current user is supervised role
+     * Check if current user is supervised role (legacy) or aggregator role (new)
      */
     public boolean isSupervised() {
-        return "supervised".equals(role);
+        return "supervised".equals(role) || "aggregator".equals(role);
+    }
+    
+    /**
+     * Check if current user is aggregator role
+     */
+    public boolean isAggregator() {
+        return "aggregator".equals(role) || "supervised".equals(role);  // Support both for transition
     }
     
     /**
@@ -236,6 +300,20 @@ public class UserSession {
     }
     
     /**
+     * Get child registry manager (for aggregators)
+     */
+    public ChildRegistryManager getChildRegistry() {
+        return childRegistry;
+    }
+    
+    /**
+     * Get linked aggregator ID (for supervisors)
+     */
+    public String getLinkedAggregatorId() {
+        return linkedAggregatorId;
+    }
+    
+    /**
      * Force reload session data
      */
     public void reloadSession(SessionLoadCallback callback) {
@@ -243,6 +321,7 @@ public class UserSession {
         currentUserId = null;
         role = null;
         supervisedUserIds = null;
+        linkedAggregatorId = null;
         loadUserSession(callback);
     }
     
@@ -250,6 +329,9 @@ public class UserSession {
      * Clean up resources
      */
     public void cleanup() {
+        if (childRegistry != null) {
+            childRegistry.cleanup();
+        }
         executorService.shutdown();
     }
 }

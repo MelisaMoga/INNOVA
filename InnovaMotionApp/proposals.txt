@@ -1,0 +1,3 @@
+Proposal of improvements:
+1. on the aggregator account it should store only the last 1000 messages or something like this in order to not flood the phone memory, right? or maybe i do not know how room db works.
+2. on the supervisor account should not get all children messages at first, maybe the last 3 days or so, in order to not flood the supervisor phone also, or again i maybe not understand this concept quite right

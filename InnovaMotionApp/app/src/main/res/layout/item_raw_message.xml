@@ -1,0 +1,104 @@
+<?xml version="1.0" encoding="utf-8"?>
+<com.google.android.material.card.MaterialCardView xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:id="@+id/cardView"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:layout_margin="4dp"
+    app:cardElevation="2dp"
+    app:cardCornerRadius="4dp">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:padding="8dp">
+
+        <!-- Header row: timestamp + child ID -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal">
+
+            <TextView
+                android:id="@+id/tvTimestamp"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="00:00:00.000"
+                android:textSize="12sp"
+                android:textStyle="bold"
+                tools:text="14:23:45.123"/>
+
+            <TextView
+                android:id="@+id/tvChildId"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="8dp"
+                android:text="Child ID"
+                android:textSize="12sp"
+                android:textColor="?attr/colorPrimary"
+                android:textStyle="bold"
+                tools:text="sensor001"/>
+
+        </LinearLayout>
+
+        <!-- Friendly name (if available) -->
+        <TextView
+            android:id="@+id/tvFriendlyName"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="2dp"
+            android:text="Friendly Name"
+            android:textSize="11sp"
+            android:textColor="?android:attr/textColorSecondary"
+            android:visibility="gone"
+            tools:text="John Doe, Room 201"
+            tools:visibility="visible"/>
+
+        <!-- Hex code + device address -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:layout_marginTop="4dp">
+
+            <TextView
+                android:id="@+id/tvHexCode"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="Hex"
+                android:textSize="13sp"
+                android:fontFamily="monospace"
+                tools:text="0xAB3311"/>
+
+            <TextView
+                android:id="@+id/tvDeviceAddress"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="8dp"
+                android:text="Device"
+                android:textSize="10sp"
+                android:textColor="?android:attr/textColorSecondary"
+                android:fontFamily="monospace"
+                tools:text="00:11:22:33:44:55"/>
+
+        </LinearLayout>
+
+        <!-- Posture description -->
+        <TextView
+            android:id="@+id/tvPostureDescription"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="2dp"
+            android:text=""
+            android:textSize="11sp"
+            android:textStyle="italic"
+            tools:text="Standing"/>
+
+    </LinearLayout>
+
+</com.google.android.material.card.MaterialCardView>
+

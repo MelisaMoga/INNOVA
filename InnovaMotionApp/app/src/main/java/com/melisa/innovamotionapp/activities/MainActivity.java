@@ -50,15 +50,19 @@ public class MainActivity extends BaseActivity {
             public void onSessionReady(String userId, String role, List<String> supervisedUserIds) {
                 runOnUiThread(() -> {
                     if ("supervisor".equals(role)) {
-                        Logger.d(TAG, "Supervisor detected: routing directly to BtConnectedActivity");
-                        // Supervisor: skip BtSettingsActivity; go straight to the live screen fed by Room
-                        Intent intent = new Intent(MainActivity.this, BtConnectedActivity.class);
+                        Logger.d(TAG, "Supervisor detected: routing to supervisor dashboard");
+                        // Supervisor: View all children from linked aggregator
+                        Intent intent = new Intent(MainActivity.this, SupervisorDashboardActivity.class);
                         intent.setFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_SINGLE_TOP);
                         startActivity(intent);
                         // do not call finish();
+                    } else if ("aggregator".equals(role) || "supervised".equals(role)) {
+                        Logger.d(TAG, "Aggregator detected: routing to BT settings for device scanning");
+                        // Aggregator (formerly supervised): Scan and connect to BT device
+                        // After connection, will route to DataAggregatorActivity
+                        navigateToActivity(BtSettingsActivity.class, null);
                     } else {
-                        Logger.d(TAG, "Supervised user detected: routing to BtSettingsActivity for scanning");
-                        // Supervised: normal flow (scan + connect)
+                        Logger.w(TAG, "Unknown role: " + role + ", defaulting to BT settings");
                         navigateToActivity(BtSettingsActivity.class, null);
                     }
                 });
@@ -67,7 +71,7 @@ public class MainActivity extends BaseActivity {
             @Override
             public void onSessionError(String error) {
                 Logger.e(TAG, "Session not ready: " + error);
-                // Fallback to supervised flow if session not ready
+                // Fallback to aggregator flow if session not ready
                 navigateToActivity(BtSettingsActivity.class, null);
             }
         });

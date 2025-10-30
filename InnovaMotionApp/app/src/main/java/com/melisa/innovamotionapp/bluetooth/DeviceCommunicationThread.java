@@ -10,7 +10,11 @@ import java.io.InputStream;
 import java.io.BufferedReader;
 import java.io.InputStreamReader;
 import java.nio.charset.StandardCharsets; // Recommended for explicit encoding
+import java.util.ArrayList;
+import java.util.List;
 import java.util.UUID;
+
+import com.melisa.innovamotionapp.utils.MessageParser;
 
 public class DeviceCommunicationThread extends Thread {
     private final BluetoothDevice device;
@@ -29,7 +33,14 @@ public class DeviceCommunicationThread extends Thread {
 
     public interface DataCallback {
         void onConnectionEstablished(BluetoothDevice device);
-        void onDataReceived(BluetoothDevice device, String data);
+        
+        /**
+         * Called when a complete packet is received (END_PACKET delimiter detected).
+         * @param device The Bluetooth device
+         * @param packetLines List of message lines in the packet (excluding END_PACKET)
+         */
+        void onPacketReceived(BluetoothDevice device, List<String> packetLines);
+        
         void onConnectionDisconnected();
     }
 
@@ -63,11 +74,13 @@ public class DeviceCommunicationThread extends Thread {
         // Using BufferedReader to read line by line.
         // It's generally more efficient than reading byte-by-byte for text streams.
         // Explicitly specifying StandardCharsets.UTF_8 is recommended for robust text handling.
-        // If your device strictly sends ASCII, you could use StandardCharsets.US_ASCII.
         BufferedReader bufferedReader = new BufferedReader(new InputStreamReader(inputStream, StandardCharsets.UTF_8));
         String receivedLine;
+        
+        // Packet accumulator for multi-user messages
+        List<String> packetLines = new ArrayList<>();
 
-        Log.d(TAG, "Starting to receive data from Bluetooth device.");
+        Log.d(TAG, "Starting to receive data from Bluetooth device (packet mode).");
 
         // Keep listening to the InputStream until an exception occurs or stream closes.
         while (true) {
@@ -81,20 +94,51 @@ public class DeviceCommunicationThread extends Thread {
                     if (receivedLine.length() > MAX_CHARS_PER_LINE) {
                         Log.w(TAG, "Received line exceeded max length (" + MAX_CHARS_PER_LINE + " chars). Original length: " + receivedLine.length() + ". Truncating data.");
                         // Truncate the string to the maximum allowed length.
-                        // The truncated part is lost, but prevents oversized strings.
                         receivedLine = receivedLine.substring(0, MAX_CHARS_PER_LINE);
                     }
 
-                    Log.d(TAG, "[Thread] Received MSG: \"" + receivedLine + "\"");
-                    callback.onDataReceived(device, receivedLine);
+                    Log.d(TAG, "[Thread] Received line: \"" + receivedLine + "\"");
+                    
+                    // Check if this is the packet end delimiter
+                    if (MessageParser.isPacketEnd(receivedLine)) {
+                        Log.i(TAG, "[Thread] END_PACKET detected, processing packet with " + packetLines.size() + " lines");
+                        
+                        // Trigger packet processing callback
+                        if (!packetLines.isEmpty()) {
+                            callback.onPacketReceived(device, new ArrayList<>(packetLines));
+                        } else {
+                            Log.w(TAG, "[Thread] Empty packet received (no lines before END_PACKET)");
+                        }
+                        
+                        // Clear accumulator for next packet
+                        packetLines.clear();
+                    } else {
+                        // Accumulate line for current packet
+                        packetLines.add(receivedLine);
+                    }
                 } else {
                     // readLine() returns null if the stream is closed gracefully
                     Log.i(TAG, "Input stream closed gracefully by remote device or system.");
+                    
+                    // If we have accumulated lines, process them as a partial packet
+                    if (!packetLines.isEmpty()) {
+                        Log.w(TAG, "[Thread] Connection closed with " + packetLines.size() + " accumulated lines (incomplete packet)");
+                        // Discard incomplete packet
+                        packetLines.clear();
+                    }
+                    
                     break; // Exit the receiving loop
                 }
             } catch (IOException e) {
                 // This catches read errors or if the stream is unexpectedly disconnected
                 Log.e(TAG, "I/O error during data reception (stream likely disconnected)", e);
+                
+                // Discard incomplete packet
+                if (!packetLines.isEmpty()) {
+                    Log.w(TAG, "[Thread] I/O error with " + packetLines.size() + " accumulated lines (discarding incomplete packet)");
+                    packetLines.clear();
+                }
+                
                 break; // Exit loop on error
             } catch (Exception e) {
                 // Catch any other unexpected exceptions during processing

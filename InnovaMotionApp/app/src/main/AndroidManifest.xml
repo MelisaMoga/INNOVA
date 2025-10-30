@@ -59,6 +59,14 @@
             android:name=".activities.BtConnectedActivity"
             android:windowSoftInputMode="adjustNothing"/>
         <activity
+            android:name=".activities.SupervisorDashboardActivity"
+            android:exported="false"
+            android:windowSoftInputMode="adjustNothing"/>
+        <activity
+            android:name=".activities.DataAggregatorActivity"
+            android:exported="false"
+            android:windowSoftInputMode="adjustNothing"/>
+        <activity
             android:name=".activities.BtSettingsActivity"
             android:exported="false"
             android:windowSoftInputMode="adjustNothing"/>
