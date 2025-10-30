@@ -124,7 +124,7 @@ public class MessageParser {
         if (line == null) {
             return false;
         }
-        return Constants.PACKET_END_DELIMITER.equals(line.trim());
+        return Constants.PACKET_END_DELIMITER.equalsIgnoreCase(line.trim());
     }
 }
 
