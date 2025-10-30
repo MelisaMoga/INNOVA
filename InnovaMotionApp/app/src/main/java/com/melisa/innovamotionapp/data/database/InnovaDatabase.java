@@ -8,7 +8,7 @@ import androidx.room.RoomDatabase;
 import androidx.room.migration.Migration;
 import androidx.sqlite.db.SupportSQLiteDatabase;
 
-@Database(entities = {ReceivedBtDataEntity.class}, version = 2)
+@Database(entities = {ReceivedBtDataEntity.class}, version = 3)
 public abstract class InnovaDatabase extends RoomDatabase {
     private static InnovaDatabase instance;
     
@@ -21,6 +21,10 @@ public abstract class InnovaDatabase extends RoomDatabase {
                     "ON received_bt_data (device_address, timestamp, received_msg)");
         }
     };
+    
+    // Migration from version 2 to 3 - Multi-user packet architecture
+    // Using fallbackToDestructiveMigration() for fresh start (acceptable during development)
+    // In production, you would implement actual schema migration here if needed
 
     public abstract ReceivedBtDataDao receivedBtDataDao();
 

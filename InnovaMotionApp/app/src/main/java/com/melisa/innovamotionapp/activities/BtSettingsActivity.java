@@ -58,16 +58,16 @@ public class BtSettingsActivity extends BaseActivity {
             public void onSessionReady(String userId, String role, List<String> supervisedUserIds) {
                 runOnUiThread(() -> {
                     if ("supervisor".equals(role)) {
-                        Logger.d(TAG, "Supervisor detected in BtSettingsActivity: redirecting to BtConnectedActivity");
-                        Intent intent = new Intent(BtSettingsActivity.this, BtConnectedActivity.class);
+                        Logger.d(TAG, "Supervisor detected in BtSettingsActivity: redirecting to SupervisorDashboard");
+                        Intent intent = new Intent(BtSettingsActivity.this, SupervisorDashboardActivity.class);
                         intent.setFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_SINGLE_TOP);
                         startActivity(intent);
                         finish();
                         return;
                     }
                     
-                    // Continue with normal supervised user flow
-                    initializeSupervisedUserUI();
+                    // Continue with normal aggregator user flow
+                    initializeAggregatorUserUI();
                 });
             }
             
@@ -75,12 +75,12 @@ public class BtSettingsActivity extends BaseActivity {
             public void onSessionError(String error) {
                 Logger.e(TAG, "Session not ready: " + error);
                 // Continue with normal flow if session not ready
-                initializeSupervisedUserUI();
+                initializeAggregatorUserUI();
             }
         });
     }
     
-    private void initializeSupervisedUserUI() {
+    private void initializeAggregatorUserUI() {
         binding = BtSettingsActivityBinding.inflate(getLayoutInflater());
         setContentView(binding.getRoot());
 
@@ -251,8 +251,21 @@ public class BtSettingsActivity extends BaseActivity {
 
 
     private void launchBtConnectedActivity() {
-        Logger.userAction(TAG, "Launching BtConnectedActivity");
-        navigateToActivityAndFinish(BtConnectedActivity.class, null);
+        // Route based on user role
+        RoleProvider.Role role = RoleProvider.getCurrentRole();
+        
+        if (role == RoleProvider.Role.AGGREGATOR) {
+            Logger.userAction(TAG, "Launching DataAggregatorActivity (aggregator role)");
+            navigateToActivityAndFinish(DataAggregatorActivity.class, null);
+        } else if (role == RoleProvider.Role.SUPERVISOR) {
+            // Supervisors shouldn't normally reach here, but handle it gracefully
+            Logger.w(TAG, "Supervisor reached BT connection flow, routing to dashboard");
+            navigateToActivityAndFinish(SupervisorDashboardActivity.class, null);
+        } else {
+            // Unknown role: default to aggregator behavior
+            Logger.w(TAG, "Unknown role, defaulting to DataAggregatorActivity");
+            navigateToActivityAndFinish(DataAggregatorActivity.class, null);
+        }
     }
 
     @Override

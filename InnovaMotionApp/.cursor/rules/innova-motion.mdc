@@ -1,0 +1,259 @@
+---
+alwaysApply: true
+---
+
+### InnovaMotionApp — Directional Rules
+
+**Scope**
+
+* Only modify code for the **`InnovaMotionApp`** project:
+
+  * **Android Java codebase** under `app/src/main/java/com/melisa/innovamotionapp/**`:
+  
+    * **Activities** (`activities/`):
+      * `LoginActivity` (entry point, Google Auth, role selection)
+      * `MainActivity` (home screen, role-based routing)
+      * `BtSettingsActivity` (Bluetooth device scanning & pairing)
+      * `BtConnectedActivity` (live posture display & monitoring)
+      * `BaseActivity`, `StartActivity`, `StatisticsActivity`, `TimeLapseActivity`, `EnergyConsumptionActivity`
+    
+    * **Bluetooth Layer** (`bluetooth/`):
+      * `DeviceCommunicationService` (foreground service, 500ms batch-saving thread)
+      * `DeviceCommunicationThread` (socket connection, message reception loop)
+      * `DeviceCommunicationManager` (connection lifecycle management)
+    
+    * **Data Layer** (`data/`):
+      * **Database** (`data/database/`):
+        * `InnovaDatabase` (Room database singleton)
+        * `ReceivedBtDataEntity` (entity with owner_user_id mapping)
+        * `ReceivedBtDataDao` (data access object with deduplication queries)
+      * **Posture** (`data/posture/`):
+        * `PostureFactory` (hex code parsing: 0xAB3311 → StandingPosture, 0xEF0112 → FallingPosture, etc.)
+        * `Posture` (base interface)
+        * `PostureDataLoader` (historical data queries)
+        * Concrete types: `FallingPosture`, `SittingPosture`, `StandingPosture`, `WalkingPosture`, `UnusedFootwearPosture`, `UnknownPosture`
+    
+    * **Sync & Session** (`sync/`):
+      * `FirestoreSyncService` (cloud ↔ local sync; `handleSupervisorDocumentChanges()` for mirror pipeline)
+      * `SessionGate` (post-login orchestration: backfill + mirror setup)
+      * `UserSession` (caches role & supervised user IDs)
+      * `FirestoreDataModel` (Firestore document structure)
+      * `NetworkConnectivityMonitor` (network state, retry triggers)
+      * `SyncManager`, `SyncActivity` (sync orchestration)
+    
+    * **Utilities** (`utils/`):
+      * `Constants` (COUNTDOWN_TIMER_IN_MILLISECONDS_FOR_MESSAGE_SAVE = 500, other constants)
+      * `AlertNotifications` (fall detection notifications for both roles)
+      * `RoleProvider` (supervised vs supervisor checks)
+      * `GlobalData` (singleton LiveData for UI state)
+      * `Logger`, `NotificationConfig` (logging & notification infrastructure)
+      * `OwnerSource`, `TargetUserResolver`, `UserDeviceSettingsStorage` (owner mapping utilities)
+    
+    * **UI Components** (`ui/`):
+      * `adapters/` (RecyclerView adapters for lists)
+      * `components/` (reusable UI components)
+      * `viewmodels/` (ViewModel classes for UI state)
+    
+    * **Broadcast Receivers** (`receivers/`):
+      * `BluetoothStateReceiver` (Bluetooth on/off events)
+      * `DiscoveryFinishedReceiver`, `NearbyDeviceDiscoveryReceiver` (device discovery)
+    
+    * **Login Module** (`_login/`):
+      * `LoginActivity`, `LoginViewModel`, `LoginViewModelFactory`
+      * `LoggedInUserView`, `LoginFormState`, `LoginResult`
+      * Login data models and state management
+  
+  * **Resources** under `app/src/main/res/**`:
+    * Layouts (`layout/`), strings (`values/strings.xml`), themes, drawables, colors
+    * Navigation graphs, menus, animations
+  
+  * **Configuration Files**:
+    * `AndroidManifest.xml` (permissions, activities, services, receivers)
+    * `build.gradle.kts` (app-level dependencies: Room, Firebase, Bluetooth)
+    * `proguard-rules.pro` (code obfuscation rules)
+    * `google-services.json` (Firebase configuration)
+  
+  * **Root-Level Build Config**:
+    * `build.gradle.kts` (project-level)
+    * `settings.gradle.kts` (project settings)
+    * `gradle.properties` (Gradle configuration)
+
+  * **Documentation** (`docs/`):
+    * Can update/add documentation files when making significant architectural changes
+    * Keep docs synchronized with code behavior
+  
+  * **Do NOT touch**:
+    * Unrelated projects outside InnovaMotionApp
+    * IDE configuration files (`.idea/`, `.vscode/`, editor settings)
+    * System files, Git configuration
+    * Generated files (`build/`, `.gradle/`, `*.apk`, `*.aab`)
+
+**Intent**
+
+* Prefer **small, surgical diffs** that preserve existing behavior.
+* Keep things **DRY** — extract helpers/utility methods instead of duplicating logic (Java utility classes or shared service methods).
+* Maintain clear separation of concerns: UI (Activities) → Business Logic (Services/ViewModels) → Data (Room/Firestore).
+
+**Priorities (in order)**
+
+1. **Threading discipline** (all network/DB ops on background threads; UI updates on main thread only)
+2. **Offline-first integrity** (Room as source of truth; cloud sync is best-effort; no data loss)
+3. **Correctness & safety** (deduplication, owner mapping, fall detection within 24h window)
+4. **Dual-role stability** (supervised vs supervisor flows must remain independent and stable)
+5. **Performance** (500ms batch cycles, efficient queries, no blocking operations on UI thread)
+6. **Maintainability** (clear logging, explicit threading annotations, documented decision points)
+7. New features **only if zero regressions** to existing flows
+
+**Architecture Principles**
+
+* **Offline-First**: 
+  * Supervised users: Always save to Room first → upload to Firestore second (retry on failure)
+  * Supervisors: Backfill missing data from Firestore → mirror real-time updates → store with owner mapping
+  
+* **Threading Contracts**:
+  * **Background threads**: All Firestore operations, Room DAO queries, Bluetooth socket I/O, batch processing
+  * **UI thread**: Only `runOnUiThread()` for UI updates, LiveData observers, navigation actions
+  * Use `ExecutorService` for background work pools; never block main thread
+
+* **Dual-Role System**:
+  * **Supervised users**: Connect Bluetooth device → batch messages every 500ms → upload to Firestore
+  * **Supervisors**: Attach Firestore mirrors → download real-time updates → insert with `owner_user_id` mapping
+  * Session bootstrapping handles role-based initialization (backfill + mirrors)
+
+* **Data Layer Patterns**:
+  * **Owner Mapping**: Every `ReceivedBtDataEntity` tagged with `owner_user_id` (supervised user's UID for their own data, supervised UID for supervisor mirrors)
+  * **Deduplication**: Check `dao.messageExistsOwned(supervisedUserId, deviceAddress, timestamp, receivedMsg)` before insert
+  * **Batch Processing**: 500ms cycles (defined in `Constants.COUNTDOWN_TIMER_IN_MILLISECONDS_FOR_MESSAGE_SAVE`)
+  * **Fall Detection**: Parse posture via `PostureFactory` → check 24h window → trigger `AlertNotifications`
+
+* **Centralize Common Logic**:
+  * Posture parsing → `PostureFactory.createPosture()`
+  * Network status → `NetworkConnectivityMonitor`
+  * Notifications → `AlertNotifications`
+  * Session/role checks → `SessionGate`, `UserSession`, `RoleProvider`
+  * Firebase operations → `FirestoreSyncService`
+
+**Behavior Contracts (don't break)**
+
+* **Threading**:
+  * Firestore listeners (`addSnapshotListener`) fire on background threads
+  * Room DAO operations are synchronous but called from background threads
+  * UI updates via `runOnUiThread()` or LiveData observation on main thread
+
+* **Batch Saving** (supervised users):
+  * `DeviceCommunicationService` batch thread runs every **500ms**
+  * Accumulates messages in memory → bulk insert to Room → trigger Firestore upload
+  * Thread name: `batchSaving "DeviceCommunicationService.java"`
+
+* **Supervisor Mirror Pipeline**:
+  * Mirrors attach in `FirestoreSyncService.startSupervisorMirror()`
+  * Updates processed in `handleSupervisorDocumentChanges()`
+  * Deduplication check → owner mapping → fall detection (24h window) → Room insert
+  * Fall notifications include supervised user's email
+
+* **Owner Mapping**:
+  * Supervised user's own data: `owner_user_id = their UID`
+  * Supervisor mirrors: `owner_user_id = supervised user's UID`
+  * All queries filter by `owner_user_id` to prevent data mixing
+
+* **Fall Detection**:
+  * Check if posture is `FallingPosture` (via `PostureFactory`)
+  * Verify timestamp within 24 hours of current time
+  * Fetch supervised user's email from Firestore
+  * Show notification to supervisor with supervised user identification
+
+* **Constants**:
+  * Batch interval: `Constants.COUNTDOWN_TIMER_IN_MILLISECONDS_FOR_MESSAGE_SAVE = 500`
+  * Preserve existing constant values unless explicitly required to change
+
+**Style**
+
+* **Java**:
+  * Follow Android best practices: Activities for UI, Services for long-running ops, ViewModels for UI state
+  * Explicit error handling with try-catch; log errors with context (`Log.e(TAG, "message", exception)`)
+  * No silent failures; always log + handle errors gracefully
+  * Use `@NonNull` / `@Nullable` annotations where applicable
+  * Thread-safe shared state (synchronize access to collections, use thread-safe singletons)
+  
+* **Threading Annotations**:
+  * Document thread context in comments: `// Thread: UI`, `// Thread: Background (ExecutorService)`, `// Thread: Bluetooth socket`
+  * Use `// Thread: Firestore callback (background)` for snapshot listeners
+
+* **Logging**:
+  * Use consistent TAG: `private static final String TAG = "ClassName";`
+  * Log levels: `Log.d()` for debug flow, `Log.i()` for important events, `Log.w()` for warnings, `Log.e()` for errors
+  * Include context in log messages (user role, device address, timestamp, message count)
+
+* **Error Messages**:
+  * User-facing: Friendly, concise, actionable (`"Connection failed. Please try again."`)
+  * Developer logs: Detailed, include stack traces and state information
+
+**Security & Data Integrity**
+
+* **Authentication**:
+  * Use Google CredentialManager for sign-in (Firebase Auth)
+  * Validate user sessions before sensitive operations
+  * Store minimal user data locally; rely on Firestore for authoritative profile
+
+* **Data Validation**:
+  * Validate Bluetooth message format before parsing (null checks, format validation)
+  * Validate supervised user emails (Gmail format) before adding to supervisor's list
+  * Sanitize inputs to prevent injection or malformed data
+
+* **Permissions**:
+  * Request Bluetooth, location, and notification permissions explicitly
+  * Handle permission denial gracefully with user-friendly messages
+  * Check permissions before starting Bluetooth operations
+
+* **Offline Security**:
+  * Room database is unencrypted (Android protected storage); sensitive data stored in Firestore
+  * No hardcoded credentials or API keys in code (use `google-services.json` for Firebase config)
+
+**Testing & Developer Experience**
+
+* **Logging for Debugging**:
+  * Log key decision points (role selection, mirror attach, fall detection, deduplication checks)
+  * Log batch metrics (message count, timestamp range, upload success/failure)
+  * Log threading context for async operations
+
+* **Assumptions & Open Questions**:
+  * Mark assumptions explicitly in code comments: `// Assumption: Firestore listener fires on background thread`
+  * Document open questions in comments: `// TODO: Confirm retry backoff strategy`
+
+* **Testing Considerations**:
+  * Isolate business logic from Android framework dependencies where possible (testable helpers)
+  * Use dependency injection for services (easier mocking in tests)
+  * Prefer small, focused methods over large monolithic functions
+
+**Change Protocol**
+
+* Explain the **"why"** in commit messages and code comments near non-obvious logic.
+* Avoid broad refactors; keep edits tightly scoped to specific user flows (supervised vs supervisor).
+* When touching critical paths (batch saving, mirror pipeline, fall detection), verify both roles still function.
+* Document threading changes explicitly (if moving logic between threads).
+* Preserve existing behavior contracts (500ms batching, 24h fall window, owner mapping, deduplication).
+
+**Key Files & Responsibilities** (maintain clear boundaries)
+
+| File | Responsibility | Do Not Break |
+|------|---------------|--------------|
+| `LoginActivity` | Google Auth, role selection, SessionGate init | Pre-fill logic, navigation flow |
+| `MainActivity` | Home screen, role-based routing | Supervised vs supervisor navigation |
+| `SessionGate` | Post-login bootstrap (backfill + mirrors) | Async orchestration, error handling |
+| `FirestoreSyncService` | All Firestore sync (upload/mirror/backfill) | `handleSupervisorDocumentChanges()` logic |
+| `DeviceCommunicationService` | Bluetooth + 500ms batch saving | Batch timing, thread lifecycle |
+| `PostureFactory` | Parse raw messages into Posture objects | Hex code mappings (0xAB3311 = Standing, 0xEF0112 = Falling) |
+| `InnovaDatabase` (Room) | Local SQLite storage | Owner mapping, deduplication constraints |
+| `AlertNotifications` | Fall detection notifications | Supervised user identification in alerts |
+
+**Common Pitfalls to Avoid**
+
+1. **Breaking Threading Discipline**: Don't call Room DAOs or Firestore operations on UI thread
+2. **Ignoring Owner Mapping**: Always set `owner_user_id` correctly for supervisor mirrors
+3. **Skipping Deduplication**: Always check `messageExistsOwned()` before inserting supervisor mirror data
+4. **Forgetting 24h Window**: Fall detection must check timestamp to avoid stale alerts
+5. **Mixing Roles**: Keep supervised and supervisor flows independent; avoid shared mutable state
+6. **Blocking Batch Cycle**: Don't disrupt the 500ms batch interval (critical for performance)
+7. **Silent Failures**: Always log errors with context; no swallowed exceptions
+
+---

@@ -31,16 +31,17 @@ import com.melisa.innovamotionapp.utils.NotificationConfig;
 import java.io.File;
 import java.io.FileOutputStream;
 import java.io.IOException;
-import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 
 public class DeviceCommunicationService extends Service {
     private FileOutputStream fileOutputStream;
+    
+    // Packet processing
+    private PacketProcessor packetProcessor;
+    private ExecutorService executorService;
 
-
-    /**
-     * @noinspection BusyWait
-     */
     @Override
     public void onCreate() {
         super.onCreate();
@@ -51,53 +52,11 @@ public class DeviceCommunicationService extends Service {
         // Initialize Firestore sync service and user session
         firestoreSyncService = FirestoreSyncService.getInstance(this);
         userSession = UserSession.getInstance(this);
-
-        // Start thread that will save receivedData on each second
-        // Start the batch-saving thread
-        new Thread(() -> {
-            while (isBatchSavingRunning) {
-                try {
-                    // Wait for 5 seconds
-                    Thread.sleep(Constants.COUNTDOWN_TIMER_IN_MILLISECONDS_FOR_MESSAGE_SAVE);
-
-                    // Copy and clear the list in a thread-safe manner
-                    List<ReceivedBtDataEntity> currentBatch;
-                    synchronized (lock) {
-                        currentBatch = new ArrayList<>(temporaryReceivedBtDataListToSave);
-                        temporaryReceivedBtDataListToSave.clear();
-                    }
-
-                    // Save the batch to the database
-                    if (!currentBatch.isEmpty()) {
-                        database.receivedBtDataDao().insertAll(currentBatch);
-                        
-                        // Sync each message to Firestore if user is supervised and online
-                        // NOTE: syncNewMessage does NOT insert into Room (we already did that above)
-                        for (ReceivedBtDataEntity entity : currentBatch) {
-                            firestoreSyncService.syncNewMessage(entity, new FirestoreSyncService.SyncCallback() {
-                                @Override
-                                public void onSuccess(String message) {
-                                    Log.d(TAG, "Message synced: " + message);
-                                }
-
-                                @Override
-                                public void onError(String error) {
-                                    Log.w(TAG, "Sync error: " + error);
-                                }
-
-                                @Override
-                                public void onProgress(int current, int total) {
-                                    // Not used for single message sync
-                                }
-                            });
-                        }
-                    }
-                } catch (InterruptedException e) {
-                    Thread.currentThread().interrupt(); // Restore interrupted status
-                    break;
-                }
-            }
-        }).start();
+        
+        // Initialize executor service for packet processing
+        executorService = Executors.newFixedThreadPool(2);
+        
+        Log.i(TAG, "DeviceCommunicationService created with packet-based architecture");
     }
 
     @Override
@@ -111,9 +70,6 @@ public class DeviceCommunicationService extends Service {
 
     // Database operations
     private InnovaDatabase database;
-    private final List<ReceivedBtDataEntity> temporaryReceivedBtDataListToSave = new ArrayList<>();
-    private final Object lock = new Object(); // For thread-safe access to the list
-    private volatile boolean isBatchSavingRunning = true; // Flag to stop the batch-saving thread
     
     // Firestore sync service and user session
     private FirestoreSyncService firestoreSyncService;
@@ -153,6 +109,9 @@ public class DeviceCommunicationService extends Service {
         try {
             // Prepare the file to store data from the device
             fileOutputStream = new FileOutputStream(new File(getFilesDir(), String.format(Constants.POSTURE_DATA_SAVE_FILE_NAME, device.getAddress())));
+            
+            // Create packet processor for this device
+            packetProcessor = new PacketProcessor(this, device.getAddress(), executorService);
 
             // Create a new connection thread to connect to the Bluetooth device
             deviceCommunicationThread = new DeviceCommunicationThread(device, new DeviceCommunicationThread.DataCallback() {
@@ -165,55 +124,32 @@ public class DeviceCommunicationService extends Service {
                     // Reset consecutive attempts
                     attemptToReconnectCounter = 0;
 
-                    // Update the existing foreground notification (don’t create a new one)
+                    // Update the existing foreground notification (don't create a new one)
                     updateServiceNotification(
                             getString(R.string.notif_bt_title_connected, device.getName()),
                             getString(R.string.notif_bt_text_connected),
                             R.drawable.baseline_bluetooth_connected_24
                     );
                 }
-
+                
                 @Override
-                public void onDataReceived(BluetoothDevice device, String receivedData) {
-                    Log.d(TAG, "[Service] MSG: " + receivedData);
-
+                public void onPacketReceived(BluetoothDevice device, List<String> packetLines) {
+                    Log.i(TAG, "[Service] Packet received with " + packetLines.size() + " lines");
+                    
+                    // Write packet lines to file for debugging
                     try {
-                        fileOutputStream.write((receivedData + "\n").getBytes());
+                        for (String line : packetLines) {
+                            fileOutputStream.write((line + "\n").getBytes());
+                        }
+                        fileOutputStream.write("END_PACKET\n".getBytes());
+                        fileOutputStream.flush();
                     } catch (IOException e) {
-                        Log.d(TAG, "ERROR writing posture file", e);
+                        Log.w(TAG, "ERROR writing packet to file", e);
                     }
-
-                    final long now = System.currentTimeMillis();
-
-                    // App policy: user is signed in; Firebase caches UID offline. Fetch UID when supervised.
-                    String ownerUid = null;
-                    if (userSession.isLoaded() && userSession.isSupervised()) {
-                        ownerUid = firestoreSyncService.getCurrentUserId(); // cached UID even offline
-                    }
-
-                    // IMPORTANT: for supervised users, ensure owner_user_id is set at creation time
-                    final ReceivedBtDataEntity entity = (ownerUid != null)
-                            ? new ReceivedBtDataEntity(device.getAddress(), now, receivedData, ownerUid)
-                            : new ReceivedBtDataEntity(device.getAddress(), now, receivedData);
-
-                    // Always enqueue for local persistence (batch thread will insertAll with IGNORE)
-                    synchronized (lock) {
-                        temporaryReceivedBtDataListToSave.add(entity);
-                    }
-
-                    // Keep existing LiveData/UI updates
-                    Posture posture = PostureFactory.createPosture(receivedData);
-                    GlobalData.getInstance().setReceivedPosture(posture);
-
-                    // Notify fall locally (supervised device)
-                    if (posture instanceof com.melisa.innovamotionapp.data.posture.types.FallingPosture) {
-                        String who = (ownerUid != null) ? ownerUid : "you";
-                        AlertNotifications.notifyFall(
-                                DeviceCommunicationService.this,
-                                who,
-                                getString(R.string.notif_fall_text_generic)
-                        );
-                    }
+                    
+                    // Process packet (parsing, Room insert, Firestore upload)
+                    // This happens on background thread inside PacketProcessor
+                    packetProcessor.processPacket(packetLines);
                 }
 
                 @Override
@@ -225,7 +161,7 @@ public class DeviceCommunicationService extends Service {
                         Log.d(TAG, "ERROR closing input stream", e);
                     }
 
-                    // Update the same foreground notification to show we’re reconnecting
+                    // Update the same foreground notification to show we're reconnecting
                     updateServiceNotification(
                             getString(R.string.notif_bt_title_disconnected),
                             getString(R.string.notif_bt_text_reconnecting),
@@ -269,8 +205,11 @@ public class DeviceCommunicationService extends Service {
     @Override
     public void onDestroy() {
         super.onDestroy();
-
-        isBatchSavingRunning = false; // Signal the batch-saving thread to stop
+        
+        // Shutdown executor service
+        if (executorService != null) {
+            executorService.shutdown();
+        }
         
         // Clean up sync service and user session
         if (firestoreSyncService != null) {

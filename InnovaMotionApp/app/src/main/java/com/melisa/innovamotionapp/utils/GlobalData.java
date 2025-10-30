@@ -42,7 +42,13 @@ public class GlobalData extends Application {
     public UserDeviceSettingsStorage userDeviceSettingsStorage;
     private final MutableLiveData<Posture> receivedPosture = new MutableLiveData<>();
     private final MutableLiveData<Boolean> isConnectedDevice = new MutableLiveData<>();
-    public String currentUserRole = null; // "supervised" or "supervisor"
+    
+    // Packet statistics for aggregator UI
+    private final MutableLiveData<Integer> packetCount = new MutableLiveData<>(0);
+    private final MutableLiveData<Long> lastPacketTimestamp = new MutableLiveData<>(0L);
+    private final MutableLiveData<String> lastRawMessage = new MutableLiveData<>("");
+    
+    public String currentUserRole = null; // "supervised" or "supervisor" (or "aggregator")
     public String currentUserUid = null;
     public java.util.List<String> supervisedUserIds = new java.util.ArrayList<>();
 
@@ -58,6 +64,19 @@ public class GlobalData extends Application {
     }
     public void setIsConnectedDevice(boolean connectionEstablished) {
         isConnectedDevice.postValue(connectionEstablished);
+    }
+    
+    // Packet statistics getters and setters
+    public LiveData<Integer> getPacketCount() {
+        return packetCount;
+    }
+    
+    public LiveData<Long> getLastPacketTimestamp() {
+        return lastPacketTimestamp;
+    }
+    
+    public LiveData<String> getLastRawMessage() {
+        return lastRawMessage;
     }
     
     /**
@@ -93,6 +112,11 @@ public class GlobalData extends Application {
         // Reset LiveData to neutral state
         receivedPosture.postValue(null);
         isConnectedDevice.postValue(false);
+        
+        // Reset packet statistics
+        packetCount.postValue(0);
+        lastPacketTimestamp.postValue(0L);
+        lastRawMessage.postValue("");
     }
     
     public String userName = "Popescu Mihaita";

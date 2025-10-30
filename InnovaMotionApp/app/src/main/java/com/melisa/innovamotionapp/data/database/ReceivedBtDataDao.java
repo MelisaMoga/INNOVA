@@ -74,9 +74,15 @@ public interface ReceivedBtDataDao {
     @Query("SELECT * FROM received_bt_data WHERE owner_user_id = :ownerUserId ORDER BY timestamp DESC LIMIT 1")
     LiveData<ReceivedBtDataEntity> getLatestForOwner(String ownerUserId);
     
-    // Get latest message from any of the supervised users (supervisor feed)
+    // Get latest message from any of the supervised users (supervisor feed - single latest)
     @Query("SELECT * FROM received_bt_data WHERE owner_user_id IN (:ownerUserIds) ORDER BY timestamp DESC LIMIT 1")
-    LiveData<ReceivedBtDataEntity> getLatestForOwners(List<String> ownerUserIds);
+    LiveData<ReceivedBtDataEntity> getLatestForOwnersSingle(List<String> ownerUserIds);
+    
+    // Get latest message for EACH supervised user (supervisor dashboard)
+    // Returns one row per owner with their most recent message
+    @Query("SELECT * FROM received_bt_data WHERE id IN " +
+           "(SELECT MAX(id) FROM received_bt_data WHERE owner_user_id IN (:ownerUserIds) GROUP BY owner_user_id)")
+    LiveData<List<ReceivedBtDataEntity>> getLatestForOwners(List<String> ownerUserIds);
     
     // Get all data for a specific owner (for supervisor monitoring)
     @Query("SELECT * FROM received_bt_data WHERE owner_user_id = :ownerUserId ORDER BY timestamp ASC")
@@ -153,6 +159,25 @@ public interface ReceivedBtDataDao {
         @androidx.room.ColumnInfo(name = "owner") 
         public String owner;
         @androidx.room.ColumnInfo(name = "c") 
+        public int count;
+    }
+    
+    // -------- Aggregator-specific queries (for multi-user packet processing) --------
+    
+    // Get recent messages (all children, for aggregator raw log)
+    @Query("SELECT * FROM received_bt_data ORDER BY timestamp DESC LIMIT :limit")
+    LiveData<List<ReceivedBtDataEntity>> getRecentMessages(int limit);
+    
+    // Get message count per child (for aggregator statistics)
+    @Query("SELECT owner_user_id, COUNT(*) as count FROM received_bt_data WHERE owner_user_id IN (:childIds) GROUP BY owner_user_id")
+    List<ChildMessageCount> getMessageCountPerChild(List<String> childIds);
+    
+    // Helper class for getMessageCountPerChild query
+    class ChildMessageCount {
+        @androidx.room.ColumnInfo(name = "owner_user_id")
+        public String childId;
+        
+        @androidx.room.ColumnInfo(name = "count")
         public int count;
     }
 }

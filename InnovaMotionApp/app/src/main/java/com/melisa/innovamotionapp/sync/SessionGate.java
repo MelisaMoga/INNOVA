@@ -197,8 +197,8 @@ public class SessionGate {
     private void runPostAuthBootstrap(String role, List<String> supervisedUserIds) {
         Log.i(TAG, "Running post-auth bootstrap for role: " + role);
         
-        if ("supervised".equals(role)) {
-            runSupervisedPipeline();
+        if ("aggregator".equals(role) || "supervised".equals(role)) {
+            runAggregatorPipeline();
         } else if ("supervisor".equals(role)) {
             runSupervisorPipeline(supervisedUserIds);
         } else {
@@ -207,28 +207,18 @@ public class SessionGate {
     }
     
     /**
-     * Run supervised user pipeline
+     * Run aggregator user pipeline
+     * Aggregators collect data from Bluetooth device - no backfill needed.
+     * Child registry loaded automatically in UserSession.
      */
-    private void runSupervisedPipeline() {
-        Log.i(TAG, "Starting supervised user pipeline");
+    private void runAggregatorPipeline() {
+        Log.i(TAG, "Starting aggregator pipeline");
         
-        // Backfill current user's data from cloud
-        syncService.backfillLocalFromCloudForCurrentUser(new FirestoreSyncService.SyncCallback() {
-            @Override
-            public void onSuccess(String message) {
-                Log.i(TAG, "Supervised backfill completed: " + message);
-            }
-            
-            @Override
-            public void onError(String error) {
-                Log.w(TAG, "Supervised backfill failed: " + error);
-            }
-            
-            @Override
-            public void onProgress(int current, int total) {
-                Log.d(TAG, "Supervised backfill progress: " + current + "/" + total);
-            }
-        });
+        // Aggregators don't need backfill - they collect data from Bluetooth device
+        // Child registry is already loaded by UserSession
+        // When first packets arrive, children will be auto-registered
+        
+        Log.i(TAG, "Aggregator pipeline initialized (child registry loaded, ready to receive BT data)");
     }
     
     /**

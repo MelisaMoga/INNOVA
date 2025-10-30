@@ -3,11 +3,15 @@ package com.melisa.innovamotionapp.utils;
 /**
  * Utility class for accessing the current user's role.
  * Provides a simple interface to get the cached role from GlobalData.
+ * 
+ * Role terminology:
+ * - AGGREGATOR: Data collection phone (formerly "supervised")
+ * - SUPERVISOR: Monitoring person
  */
 public final class RoleProvider {
     public enum Role { 
-        SUPERVISED, 
-        SUPERVISOR, 
+        AGGREGATOR,  // Data collection phone (multi-user collector)
+        SUPERVISOR,  // Monitoring person
         UNKNOWN 
     }
 
@@ -22,8 +26,10 @@ public final class RoleProvider {
     public static Role getCurrentRole() {
         // Get role from GlobalData (should be cached after login)
         String role = GlobalData.getInstance().currentUserRole;
-        if ("supervised".equalsIgnoreCase(role)) {
-            return Role.SUPERVISED;
+        
+        // Support both "aggregator" (new) and "supervised" (legacy) for transition
+        if ("aggregator".equalsIgnoreCase(role) || "supervised".equalsIgnoreCase(role)) {
+            return Role.AGGREGATOR;
         }
         if ("supervisor".equalsIgnoreCase(role)) {
             return Role.SUPERVISOR;
@@ -40,10 +46,10 @@ public final class RoleProvider {
     }
     
     /**
-     * Check if the current user is supervised
-     * @return true if user is supervised, false otherwise
+     * Check if the current user is an aggregator (data collector)
+     * @return true if user is an aggregator, false otherwise
      */
-    public static boolean isSupervised() {
-        return getCurrentRole() == Role.SUPERVISED;
+    public static boolean isAggregator() {
+        return getCurrentRole() == Role.AGGREGATOR;
     }
 }
