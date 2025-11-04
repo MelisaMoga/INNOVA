@@ -199,7 +199,7 @@ Personal Îngrijire Monitorizare
 **Include:**
 - Implementare completă a tuturor funcționalităților
 - Testare și documentație
-- 15 zile suport post-deployment
+- suport post-deployment
 
 ---
 
