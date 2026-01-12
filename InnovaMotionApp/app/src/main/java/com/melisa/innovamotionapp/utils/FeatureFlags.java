@@ -121,6 +121,24 @@ public final class FeatureFlags {
      */
     public static final boolean VERBOSE_BT_LOGGING = false;
     
+    // ========== DEVELOPER MODE FLAGS ==========
+    
+    /**
+     * Enable developer testing mode.
+     * 
+     * When true: Shake device or long-press toolbar to open developer panel
+     * When false: Developer panel is completely disabled
+     * 
+     * IMPORTANT: Set to false for production builds!
+     * 
+     * Developer mode allows:
+     * - Injecting mock sensor data without Bluetooth hardware
+     * - Running pre-defined test scenarios
+     * - Clearing local database
+     * - Viewing debug statistics
+     */
+    public static final boolean DEV_MODE_ENABLED = true;
+    
     // Prevent instantiation
     private FeatureFlags() {
         throw new UnsupportedOperationException("FeatureFlags class cannot be instantiated");

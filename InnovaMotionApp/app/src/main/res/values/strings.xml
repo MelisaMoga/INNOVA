@@ -152,4 +152,38 @@
     <string name="name_updated">Name updated to %1$s</string>
     <string name="no_monitored_persons_hint">Persons will appear here when data is received from sensors</string>
     <string name="person_icon_desc">Person icon</string>
+
+    <!-- Developer Panel -->
+    <string name="dev_panel_title">Developer Testing Mode</string>
+    <string name="dev_panel_subtitle">Inject mock data for testing</string>
+    <string name="dev_mode_activated">Developer mode activated</string>
+    <string name="select_scenario">Select Test Scenario</string>
+    <string name="run_scenario">Run Scenario</string>
+    <string name="clear_all_data">Clear All Data</string>
+    <string name="db_stats">Database: %1$d messages, %2$d sensors</string>
+    <string name="scenario_running">Running scenario…</string>
+    <string name="scenario_complete">Injected %1$d readings for %2$d sensors</string>
+    <string name="scenario_error">Error: %1$s</string>
+    <string name="data_cleared">All data cleared</string>
+    <string name="close">Close</string>
+
+    <!-- Test Scenario Names -->
+    <string name="scenario_basic_multi_person_title">Basic Multi-Person</string>
+    <string name="scenario_basic_multi_person_desc">3 sensors with varied postures (10 readings each)</string>
+    <string name="scenario_fall_detection_title">Fall Detection</string>
+    <string name="scenario_fall_detection_desc">1 sensor with fall posture - triggers alerts</string>
+    <string name="scenario_stale_data_title">Stale Data</string>
+    <string name="scenario_stale_data_desc">3 sensors with old timestamps - tests yellow status</string>
+    <string name="scenario_high_volume_title">High Volume</string>
+    <string name="scenario_high_volume_desc">10 sensors, 50 readings each - stress test</string>
+    <string name="scenario_name_resolution_title">Name Resolution</string>
+    <string name="scenario_name_resolution_desc">5 sensors with assigned display names</string>
+    <string name="scenario_mixed_states_title">Mixed States</string>
+    <string name="scenario_mixed_states_desc">Active + stale + alert sensors - tests dashboard</string>
+
+    <!-- Firestore sync toggle -->
+    <string name="sync_to_firestore">Also sync to Firestore</string>
+    <string name="syncing_to_firestore">Syncing to Firestore…</string>
+    <string name="firestore_sync_complete">Synced %1$d readings to Firestore</string>
+    <string name="firestore_sync_error">Firestore sync failed: %1$s</string>
 </resources>
