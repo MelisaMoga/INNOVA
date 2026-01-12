@@ -113,6 +113,6 @@
     <string name="notif_bt_text_reconnecting">Trying to reconnect…</string>
 
     <!-- fall notification -->
-    <string name="notif_fall_title">Fall detected</string>
-    <string name="notif_fall_text_generic">A fall may have been detected. Tap to open the app.</string>
+    <string name="notif_fall_title">Fall Detected: %1$s</string>
+    <string name="notif_fall_text_generic">may have fallen. Check immediately.</string>
 </resources>

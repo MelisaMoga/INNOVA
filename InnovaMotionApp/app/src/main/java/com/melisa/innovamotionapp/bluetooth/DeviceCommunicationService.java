@@ -242,11 +242,15 @@ public class DeviceCommunicationService extends Service {
 
                         // Notify fall locally (supervised device)
                         if (posture instanceof com.melisa.innovamotionapp.data.posture.types.FallingPosture) {
-                            AlertNotifications.notifyFall(
-                                    DeviceCommunicationService.this,
-                                    reading.getSensorId(),
-                                    getString(R.string.notif_fall_text_generic)
-                            );
+                            // Get display name asynchronously and show notification
+                            final String sensorId = reading.getSensorId();
+                            personNameManager.getDisplayNameAsync(sensorId, personName -> {
+                                AlertNotifications.notifyFall(
+                                        DeviceCommunicationService.this,
+                                        personName,
+                                        getString(R.string.notif_fall_text_generic)
+                                );
+                            });
                         }
                     }
                     
