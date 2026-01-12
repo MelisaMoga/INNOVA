@@ -137,6 +137,11 @@
     <!-- Person Name Management -->
     <string name="manage_person_names">Manage Names</string>
     <string name="no_monitored_persons">No monitored persons</string>
+
+    <!-- Supervisor Dashboard -->
+    <string name="supervisor_dashboard">Supervisor Dashboard</string>
+    <string name="no_monitored_persons_supervisor">No persons being monitored.\nWaiting for data from aggregators.</string>
+    <string name="alert_badge_desc">Alert indicator</string>
     <string name="edit_person_name">Edit Name</string>
     <string name="sensor_id_label">Sensor ID</string>
     <string name="display_name_hint">Display Name</string>

@@ -24,6 +24,7 @@ firebaseAuth = "24.0.1"
 firebaseDatabase = "21.0.0"
 firebaseBom = "34.1.0"
 recyclerview = "1.4.0"
+swiperefreshlayout = "1.1.0"
 
 [libraries]
 googleid = { module = "com.google.android.libraries.identity.googleid:googleid", version.ref = "googleid" }
@@ -50,6 +51,7 @@ credentials-play-services-auth = { group = "androidx.credentials", name = "crede
 firebase-bom = { module = "com.google.firebase:firebase-bom", version.ref = "firebaseBom" }
 firebase-firestore = { group = "com.google.firebase", name = "firebase-firestore" }
 recyclerview = { group = "androidx.recyclerview", name = "recyclerview", version.ref = "recyclerview" }
+swiperefreshlayout = { group = "androidx.swiperefreshlayout", name = "swiperefreshlayout", version.ref = "swiperefreshlayout" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }

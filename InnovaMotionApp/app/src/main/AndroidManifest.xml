@@ -58,6 +58,10 @@
             android:exported="false"
             android:parentActivityName=".activities.AggregatorDashboardActivity" />
         <activity
+            android:name=".activities.SupervisorDashboardActivity"
+            android:exported="false"
+            android:label="@string/supervisor_dashboard" />
+        <activity
             android:name=".activities.EnergyConsumptionActivity"/>
         <activity
             android:name=".activities.TimeLapseActivity"/>

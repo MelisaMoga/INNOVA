@@ -50,16 +50,15 @@ public class MainActivity extends BaseActivity {
             public void onSessionReady(String userId, String role, List<String> supervisedUserIds) {
                 runOnUiThread(() -> {
                     if ("supervisor".equals(role)) {
-                        Logger.d(TAG, "Supervisor detected: routing directly to BtConnectedActivity");
-                        // Supervisor: skip BtSettingsActivity; go straight to the live screen fed by Room
-                        Intent intent = new Intent(MainActivity.this, BtConnectedActivity.class);
-                        intent.setFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_SINGLE_TOP);
+                        Logger.d(TAG, "Supervisor detected: routing to SupervisorDashboardActivity");
+                        // Supervisor: go to multi-person dashboard
+                        Intent intent = new Intent(MainActivity.this, SupervisorDashboardActivity.class);
                         startActivity(intent);
-                        // do not call finish();
                     } else {
-                        Logger.d(TAG, "Supervised user detected: routing to BtSettingsActivity for scanning");
-                        // Supervised: normal flow (scan + connect)
-                        navigateToActivity(BtSettingsActivity.class, null);
+                        Logger.d(TAG, "Aggregator detected: routing to AggregatorDashboardActivity");
+                        // Aggregator: go to aggregator dashboard for Bluetooth connection
+                        Intent intent = new Intent(MainActivity.this, AggregatorDashboardActivity.class);
+                        startActivity(intent);
                     }
                 });
             }

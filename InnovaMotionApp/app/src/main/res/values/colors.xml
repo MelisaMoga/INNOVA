@@ -99,4 +99,9 @@
     <color name="card_background">#FFFFFF</color>
     <color name="card_text_primary">#1C1C1C</color>
     <color name="chip_background">#E0E0E0</color>
+
+    <!-- Supervisor Dashboard Status Colors -->
+    <color name="status_active">#4CAF50</color>
+    <color name="status_stale">#FFC107</color>
+    <color name="status_alert">#F44336</color>
 </resources>
