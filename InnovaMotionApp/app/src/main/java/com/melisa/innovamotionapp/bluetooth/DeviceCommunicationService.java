@@ -27,6 +27,7 @@ import com.melisa.innovamotionapp.utils.AlertNotifications;
 import com.melisa.innovamotionapp.utils.Constants;
 import com.melisa.innovamotionapp.utils.GlobalData;
 import com.melisa.innovamotionapp.utils.NotificationConfig;
+import com.melisa.innovamotionapp.utils.PersonNameManager;
 
 import java.io.File;
 import java.util.List;
@@ -52,6 +53,7 @@ public class DeviceCommunicationService extends Service {
         // Initialize Firestore sync service and user session
         firestoreSyncService = FirestoreSyncService.getInstance(this);
         userSession = UserSession.getInstance(this);
+        personNameManager = PersonNameManager.getInstance(this);
 
         // Start thread that will save receivedData on each second
         // Start the batch-saving thread
@@ -119,6 +121,9 @@ public class DeviceCommunicationService extends Service {
     // Firestore sync service and user session
     private FirestoreSyncService firestoreSyncService;
     private UserSession userSession;
+    
+    // Person name manager (sensor ID to display name mapping)
+    private PersonNameManager personNameManager;
     
     // Multi-user protocol parser
     private final PacketParser packetParser = new PacketParser();
@@ -222,6 +227,9 @@ public class DeviceCommunicationService extends Service {
                                 ownerUid,
                                 reading.getSensorId()
                         );
+
+                        // Register sensor if new (async, creates with sensorId as default name)
+                        personNameManager.ensureSensorExists(reading.getSensorId());
 
                         // Enqueue for local persistence (batch thread will insertAll with IGNORE)
                         synchronized (lock) {
