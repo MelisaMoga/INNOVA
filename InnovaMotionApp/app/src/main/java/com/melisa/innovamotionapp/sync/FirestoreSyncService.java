@@ -205,7 +205,8 @@ public class FirestoreSyncService {
             entity.getDeviceAddress(),
             entity.getTimestamp(),
             entity.getReceivedMsg(),
-            user.getUid()
+            user.getUid(),
+            entity.getSensorId()
         );
 
         String documentId = firestoreModel.getDocumentId();
@@ -272,7 +273,7 @@ public class FirestoreSyncService {
         
         // Prepare document IDs and mapping
         for (ReceivedBtDataEntity entity : localData) {
-            String docId = FirestoreDataModel.generateDocumentId(userId, entity.getDeviceAddress(), entity.getTimestamp());
+            String docId = FirestoreDataModel.generateDocumentId(userId, entity.getDeviceAddress(), entity.getSensorId(), entity.getTimestamp());
             documentIds.add(docId);
             localDataMap.put(docId, entity);
         }
@@ -330,7 +331,8 @@ public class FirestoreSyncService {
                     entity.getDeviceAddress(),
                     entity.getTimestamp(),
                     entity.getReceivedMsg(),
-                    userId
+                    userId,
+                    entity.getSensorId()
                 );
                 
                 String documentId = firestoreModel.getDocumentId();
@@ -459,7 +461,8 @@ public class FirestoreSyncService {
                                         firestoreModel.getDeviceAddress(),
                                         firestoreModel.getTimestamp(),
                                         firestoreModel.getReceivedMsg(),
-                                        ownerUid
+                                        ownerUid,
+                                        firestoreModel.getSensorId() != null ? firestoreModel.getSensorId() : "unknown"
                                     );
                                     allEntities.add(entity);
                                 }
@@ -550,13 +553,15 @@ public class FirestoreSyncService {
                                     FirestoreDataModel firestoreModel = FirestoreDataModel.fromFirestoreDocument(document.getData());
                                     Long ts = firestoreModel.getTimestamp();
                                     String msg = firestoreModel.getReceivedMsg();
+                                    String sensorId = firestoreModel.getSensorId() != null ? firestoreModel.getSensorId() : "unknown";
 
-                                    // ✅ set owner_user_id = current supervised user’s uid
+                                    // ✅ set owner_user_id = current supervised user's uid
                                     ReceivedBtDataEntity entity = new ReceivedBtDataEntity(
                                         firestoreModel.getDeviceAddress(),
                                         ts != null ? ts : 0L,
                                         msg != null ? msg : "",
-                                        userId
+                                        userId,
+                                        sensorId
                                     );
                                     entitiesToInsert.add(entity);
                                     
@@ -672,11 +677,15 @@ public class FirestoreSyncService {
                     for (QueryDocumentSnapshot document : queryDocumentSnapshots) {
                         try {
                             FirestoreDataModel firestoreModel = FirestoreDataModel.fromFirestoreDocument(document.getData());
+                            String sensorId = firestoreModel.getSensorId() != null ? firestoreModel.getSensorId() : "unknown";
+                            String ownerUid = firestoreModel.getUserId() != null ? firestoreModel.getUserId() : "unknown";
                             
                             ReceivedBtDataEntity entity = new ReceivedBtDataEntity(
                                 firestoreModel.getDeviceAddress(),
                                 firestoreModel.getTimestamp(),
-                                firestoreModel.getReceivedMsg()
+                                firestoreModel.getReceivedMsg(),
+                                ownerUid,
+                                sensorId
                             );
                             entitiesToInsert.add(entity);
                             finalLastDocument = document;
@@ -919,11 +928,13 @@ public class FirestoreSyncService {
                                     maxTs = Math.max(maxTs, ts == null ? Long.MIN_VALUE : ts);
                                     
                                     // Build entity — **ALWAYS** assign owner_user_id = supervisedUserId
+                                    String sensorId = firestoreModel.getSensorId() != null ? firestoreModel.getSensorId() : "unknown";
                                     ReceivedBtDataEntity entity = new ReceivedBtDataEntity(
                                         firestoreModel.getDeviceAddress(),
                                         ts != null ? ts : 0L,
                                         msg != null ? msg : "",
-                                        supervisedUserId // <- THIS IS CRITICAL
+                                        supervisedUserId, // <- THIS IS CRITICAL
+                                        sensorId
                                     );
                                     
                                     // OWNER MAPPING VERIFICATION
@@ -1112,13 +1123,15 @@ public class FirestoreSyncService {
                     if (exists == 0) {
                         Long ts = firestoreModel.getTimestamp();
                         String msg = firestoreModel.getReceivedMsg();
+                        String sensorId = firestoreModel.getSensorId() != null ? firestoreModel.getSensorId() : "unknown";
                         
                         // Build entity — **ensure owner_user_id = supervisedUserId**
                         ReceivedBtDataEntity entity = new ReceivedBtDataEntity(
                             firestoreModel.getDeviceAddress(),
                             ts != null ? ts : 0L,
                             msg != null ? msg : "",
-                            supervisedUserId
+                            supervisedUserId,
+                            sensorId
                         );
                         entitiesToInsert.add(entity);
                         Log.d(TAG, "New message from supervised user " + supervisedUserId + ": " + entity.getReceivedMsg());

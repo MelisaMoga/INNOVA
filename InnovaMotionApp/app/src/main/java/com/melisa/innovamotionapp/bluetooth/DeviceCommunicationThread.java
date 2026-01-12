@@ -10,6 +10,7 @@ import java.io.InputStream;
 import java.io.BufferedReader;
 import java.io.InputStreamReader;
 import java.nio.charset.StandardCharsets; // Recommended for explicit encoding
+import java.util.List;
 import java.util.UUID;
 
 public class DeviceCommunicationThread extends Thread {
@@ -27,9 +28,41 @@ public class DeviceCommunicationThread extends Thread {
         return device;
     }
 
+    /**
+     * Callback interface for Bluetooth device communication events.
+     * 
+     * Implementations can choose between two approaches:
+     * 1. Single-line mode: Override only onDataReceived() to receive raw lines
+     * 2. Packet mode: Override onPacketReceived() to receive complete parsed packets
+     * 
+     * For backward compatibility, onPacketReceived() has a default empty implementation.
+     */
     public interface DataCallback {
         void onConnectionEstablished(BluetoothDevice device);
+        
+        /**
+         * Called when a single line of data is received from the device.
+         * This is the legacy single-line format (e.g., "0xAB3311").
+         * For multi-user protocol, this is called for each line including "END_PACKET".
+         * 
+         * @param device The connected Bluetooth device
+         * @param data The received line (without trailing newline)
+         */
         void onDataReceived(BluetoothDevice device, String data);
+        
+        /**
+         * Called when a complete packet is received (multi-user protocol).
+         * A packet consists of multiple sensor readings terminated by "END_PACKET".
+         * 
+         * Default implementation does nothing for backward compatibility.
+         * 
+         * @param device The connected Bluetooth device
+         * @param readings List of parsed readings from this packet
+         */
+        default void onPacketReceived(BluetoothDevice device, List<ParsedReading> readings) {
+            // Default: no-op for backward compatibility
+        }
+        
         void onConnectionDisconnected();
     }
 
