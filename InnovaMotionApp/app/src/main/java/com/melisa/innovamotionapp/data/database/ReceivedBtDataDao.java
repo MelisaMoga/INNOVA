@@ -152,6 +152,13 @@ public interface ReceivedBtDataDao {
     LiveData<List<ReceivedBtDataEntity>> getAllForSensor(String sensorId);
 
     /**
+     * Get readings for a specific sensor within a timestamp range.
+     * Used for date-filtered statistics/energy view of a single person.
+     */
+    @Query("SELECT * FROM received_bt_data WHERE sensor_id = :sensorId AND timestamp BETWEEN :startTime AND :endTime ORDER BY timestamp ASC")
+    LiveData<List<ReceivedBtDataEntity>> getRangeForSensor(String sensorId, long startTime, long endTime);
+
+    /**
      * Get all distinct sensor IDs in the database.
      * Used to populate dropdown lists of monitored persons.
      */

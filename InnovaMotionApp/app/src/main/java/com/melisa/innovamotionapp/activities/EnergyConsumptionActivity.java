@@ -1,6 +1,7 @@
 package com.melisa.innovamotionapp.activities;
 
 import android.os.Bundle;
+import android.util.Log;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.TextView;
@@ -27,12 +28,28 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 
+/**
+ * Activity for displaying energy consumption breakdown.
+ * 
+ * Supports two modes:
+ * 1. User-based filtering: Shows data for the current user
+ * 2. Sensor-based filtering: Shows data for a specific sensor (via intent extras)
+ */
 public class EnergyConsumptionActivity extends AppCompatActivity {
+    
+    // Intent extras for sensor-specific viewing
+    public static final String EXTRA_SENSOR_ID = "extra_sensor_id";
+    public static final String EXTRA_PERSON_NAME = "extra_person_name";
+    
     private EnergyConsumptionActivityBinding binding;
     private final GlobalData globalData = GlobalData.getInstance();
     private InnovaDatabase database;
     private EnergyConsumptionViewModel viewModel;
     private boolean displayedOnce;
+    
+    // Sensor-specific fields
+    private String sensorId;
+    private String personName;
 
 
     @Override
@@ -50,34 +67,45 @@ public class EnergyConsumptionActivity extends AppCompatActivity {
         // Boolean init to display data only once
         displayedOnce = false;
 
-        // Resolve and set target user once session is loaded
-        if (UserSession.getInstance(getApplicationContext()).isLoaded()) {
-            String target = TargetUserResolver.resolveTargetUserId(getApplicationContext());
-            android.util.Log.i("UI/Energy", "Resolved targetUserId=" + target);
-            viewModel.setTargetUserId(target);
-        } else {
-            UserSession.getInstance(getApplicationContext()).loadUserSession(new UserSession.SessionLoadCallback() {
-                @Override
-                public void onSessionLoaded(String uid, String role, java.util.List<String> kids) {
-                    String target = TargetUserResolver.resolveTargetUserId(getApplicationContext());
-                    android.util.Log.i("UI/Energy", "Resolved targetUserId=" + target);
-                    viewModel.setTargetUserId(target);
-                }
+        // Extract intent extras
+        sensorId = getIntent().getStringExtra(EXTRA_SENSOR_ID);
+        personName = getIntent().getStringExtra(EXTRA_PERSON_NAME);
 
-                @Override
-                public void onSessionLoadError(String error) {
-                    android.util.Log.w("UI/Energy", "Session load error: " + error);
-                }
-            });
+        // Choose filtering mode based on whether sensorId is provided
+        if (sensorId != null && !sensorId.isEmpty()) {
+            // Sensor-specific mode: Show data for this sensor only
+            Log.i("UI/Energy", "Sensor-specific mode: sensorId=" + sensorId + ", name=" + personName);
+            viewModel.setSensorId(sensorId);
+        } else {
+            // User-based mode: Resolve and set target user once session is loaded
+            if (UserSession.getInstance(getApplicationContext()).isLoaded()) {
+                String target = TargetUserResolver.resolveTargetUserId(getApplicationContext());
+                Log.i("UI/Energy", "Resolved targetUserId=" + target);
+                viewModel.setTargetUserId(target);
+            } else {
+                UserSession.getInstance(getApplicationContext()).loadUserSession(new UserSession.SessionLoadCallback() {
+                    @Override
+                    public void onSessionLoaded(String uid, String role, java.util.List<String> kids) {
+                        String target = TargetUserResolver.resolveTargetUserId(getApplicationContext());
+                        Log.i("UI/Energy", "Resolved targetUserId=" + target);
+                        viewModel.setTargetUserId(target);
+                    }
+
+                    @Override
+                    public void onSessionLoadError(String error) {
+                        Log.w("UI/Energy", "Session load error: " + error);
+                    }
+                });
+            }
         }
 
-        // Fetch all data for target user
+        // Fetch all data for target user or sensor
         viewModel.getAllForUser().observe(this, list -> {
 //            if (displayedOnce) {
 //                return;
 //            }
             int size = (list != null ? list.size() : 0);
-            android.util.Log.i("UI/Energy", "listSize=" + size);
+            Log.i("UI/Energy", "listSize=" + size);
             if (list != null && !list.isEmpty()) {
 
                 binding.parentLayout.removeAllViews();

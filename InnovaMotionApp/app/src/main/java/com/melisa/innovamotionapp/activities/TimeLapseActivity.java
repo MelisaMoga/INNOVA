@@ -3,6 +3,7 @@ package com.melisa.innovamotionapp.activities;
 import android.graphics.BitmapFactory;
 import android.os.Bundle;
 import android.os.Handler;
+import android.util.Log;
 import android.widget.SeekBar;
 import android.widget.Toast;
 
@@ -25,7 +26,19 @@ import java.util.Date;
 import java.util.List;
 import java.util.Locale;
 
+/**
+ * Activity for displaying posture timelapse animation.
+ * 
+ * Supports two modes:
+ * 1. User-based filtering: Shows data for the current user
+ * 2. Sensor-based filtering: Shows data for a specific sensor (via intent extras)
+ */
 public class TimeLapseActivity extends AppCompatActivity {
+    
+    // Intent extras for sensor-specific viewing
+    public static final String EXTRA_SENSOR_ID = "extra_sensor_id";
+    public static final String EXTRA_PERSON_NAME = "extra_person_name";
+    
     private TimelapsActivityBinding binding;
     private final GlobalData globalData = GlobalData.getInstance();
 
@@ -43,6 +56,10 @@ public class TimeLapseActivity extends AppCompatActivity {
     private TimeLapseViewModel viewModel;
 
     private boolean displayedOnce = false;
+    
+    // Sensor-specific fields
+    private String sensorId;
+    private String personName;
 
 
     @Override
@@ -65,34 +82,45 @@ public class TimeLapseActivity extends AppCompatActivity {
         // Boolean init to display data only once
         displayedOnce = false;
 
-        // Resolve and set target user once session is loaded
-        if (UserSession.getInstance(getApplicationContext()).isLoaded()) {
-            String target = TargetUserResolver.resolveTargetUserId(getApplicationContext());
-            android.util.Log.i("UI/TimeLapse", "Resolved targetUserId=" + target);
-            viewModel.setTargetUserId(target);
-        } else {
-            UserSession.getInstance(getApplicationContext()).loadUserSession(new UserSession.SessionLoadCallback() {
-                @Override
-                public void onSessionLoaded(String uid, String role, java.util.List<String> kids) {
-                    String target = TargetUserResolver.resolveTargetUserId(getApplicationContext());
-                    android.util.Log.i("UI/TimeLapse", "Resolved targetUserId=" + target);
-                    viewModel.setTargetUserId(target);
-                }
+        // Extract intent extras
+        sensorId = getIntent().getStringExtra(EXTRA_SENSOR_ID);
+        personName = getIntent().getStringExtra(EXTRA_PERSON_NAME);
 
-                @Override
-                public void onSessionLoadError(String error) {
-                    android.util.Log.w("UI/TimeLapse", "Session load error: " + error);
-                }
-            });
+        // Choose filtering mode based on whether sensorId is provided
+        if (sensorId != null && !sensorId.isEmpty()) {
+            // Sensor-specific mode: Show data for this sensor only
+            Log.i("UI/TimeLapse", "Sensor-specific mode: sensorId=" + sensorId + ", name=" + personName);
+            viewModel.setSensorId(sensorId);
+        } else {
+            // User-based mode: Resolve and set target user once session is loaded
+            if (UserSession.getInstance(getApplicationContext()).isLoaded()) {
+                String target = TargetUserResolver.resolveTargetUserId(getApplicationContext());
+                Log.i("UI/TimeLapse", "Resolved targetUserId=" + target);
+                viewModel.setTargetUserId(target);
+            } else {
+                UserSession.getInstance(getApplicationContext()).loadUserSession(new UserSession.SessionLoadCallback() {
+                    @Override
+                    public void onSessionLoaded(String uid, String role, java.util.List<String> kids) {
+                        String target = TargetUserResolver.resolveTargetUserId(getApplicationContext());
+                        Log.i("UI/TimeLapse", "Resolved targetUserId=" + target);
+                        viewModel.setTargetUserId(target);
+                    }
+
+                    @Override
+                    public void onSessionLoadError(String error) {
+                        Log.w("UI/TimeLapse", "Session load error: " + error);
+                    }
+                });
+            }
         }
 
-        // Observe target user's saved postures
+        // Observe target user's or sensor's saved postures
         viewModel.getAllForUser().observe(this, list -> {
             if (displayedOnce) {
                 return;
             }
             int size = (list != null ? list.size() : 0);
-            android.util.Log.i("UI/TimeLapse", "listSize=" + size);
+            Log.i("UI/TimeLapse", "listSize=" + size);
             if (list != null && !list.isEmpty()) {
                 // Boolean set to display data only once
                 displayedOnce = true;

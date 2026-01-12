@@ -46,7 +46,19 @@ import java.util.Locale;
 import java.util.Map;
 
 
+/**
+ * Activity for displaying posture statistics in a pie chart.
+ * 
+ * Supports two modes:
+ * 1. User-based filtering: Shows data for the current user
+ * 2. Sensor-based filtering: Shows data for a specific sensor (via intent extras)
+ */
 public class StatisticsActivity extends AppCompatActivity {
+    
+    // Intent extras for sensor-specific viewing
+    public static final String EXTRA_SENSOR_ID = "extra_sensor_id";
+    public static final String EXTRA_PERSON_NAME = "extra_person_name";
+    
     private StatisticsActivityBinding binding;
     private final GlobalData globalData = GlobalData.getInstance();
     private long startDate;
@@ -54,6 +66,10 @@ public class StatisticsActivity extends AppCompatActivity {
     private InnovaDatabase database;
     private StatisticsViewModel viewModel;
     private boolean showDefaultData = true;
+    
+    // Sensor-specific fields
+    private String sensorId;
+    private String personName;
 
 
     @Override
@@ -68,26 +84,37 @@ public class StatisticsActivity extends AppCompatActivity {
         // Initialize ViewModel
         viewModel = new ViewModelProvider(this).get(StatisticsViewModel.class);
 
+        // Extract intent extras
+        sensorId = getIntent().getStringExtra(EXTRA_SENSOR_ID);
+        personName = getIntent().getStringExtra(EXTRA_PERSON_NAME);
+
         // Setting click listener for the date picker button
         binding.dateRangePickerButton.setOnClickListener(view -> datePickerDialog());
         
-        // Resolve and set target user once session is loaded
-        if (UserSession.getInstance(getApplicationContext()).isLoaded()) {
-            String target = TargetUserResolver.resolveTargetUserId(getApplicationContext());
-            viewModel.setTargetUserId(target);
+        // Choose filtering mode based on whether sensorId is provided
+        if (sensorId != null && !sensorId.isEmpty()) {
+            // Sensor-specific mode: Show data for this sensor only
+            Log.i("UI/Stats", "Sensor-specific mode: sensorId=" + sensorId + ", name=" + personName);
+            viewModel.setSensorId(sensorId);
         } else {
-            UserSession.getInstance(getApplicationContext()).loadUserSession(new UserSession.SessionLoadCallback() {
-                @Override
-                public void onSessionLoaded(String userId, String role, java.util.List<String> supervisedUserIds) {
-                    String target = TargetUserResolver.resolveTargetUserId(getApplicationContext());
-                    viewModel.setTargetUserId(target);
-                }
+            // User-based mode: Resolve and set target user once session is loaded
+            if (UserSession.getInstance(getApplicationContext()).isLoaded()) {
+                String target = TargetUserResolver.resolveTargetUserId(getApplicationContext());
+                viewModel.setTargetUserId(target);
+            } else {
+                UserSession.getInstance(getApplicationContext()).loadUserSession(new UserSession.SessionLoadCallback() {
+                    @Override
+                    public void onSessionLoaded(String userId, String role, java.util.List<String> supervisedUserIds) {
+                        String target = TargetUserResolver.resolveTargetUserId(getApplicationContext());
+                        viewModel.setTargetUserId(target);
+                    }
 
-                @Override
-                public void onSessionLoadError(String error) {
-                    android.util.Log.w("UI/Stats", "Session load error: " + error);
-                }
-            });
+                    @Override
+                    public void onSessionLoadError(String error) {
+                        android.util.Log.w("UI/Stats", "Session load error: " + error);
+                    }
+                });
+            }
         }
 
         viewModel.getAllForUser().observe(this, list -> {

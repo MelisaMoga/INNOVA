@@ -4,6 +4,7 @@ import android.app.Application;
 import android.util.Log;
 
 import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
 import androidx.lifecycle.AndroidViewModel;
 import androidx.lifecycle.LiveData;
 import androidx.lifecycle.MutableLiveData;
@@ -18,10 +19,22 @@ import com.melisa.innovamotionapp.utils.OwnerSource;
 import java.util.Collections;
 import java.util.List;
 
+/**
+ * ViewModel for TimeLapse Activity.
+ * 
+ * Supports two modes:
+ * 1. User-based filtering: Shows data for a specific user (targetUserId)
+ * 2. Sensor-based filtering: Shows data for a specific sensor (sensorId)
+ * 
+ * Sensor-based filtering takes precedence when sensorId is set.
+ */
 public class TimeLapseViewModel extends AndroidViewModel {
+    private static final String TAG = "UI/TimeLapseVM";
+    
     private final ReceivedBtDataDao dao;
     private final GlobalData global = GlobalData.getInstance();
     private final MutableLiveData<String> targetUserId = new MutableLiveData<>();
+    private final MutableLiveData<String> sensorId = new MutableLiveData<>();
     private final MutableLiveData<List<ReceivedBtDataEntity>> latestDevicePostureData = new MutableLiveData<>();
 
     public TimeLapseViewModel(@NonNull Application app) {
@@ -29,15 +42,59 @@ public class TimeLapseViewModel extends AndroidViewModel {
         dao = InnovaDatabase.getInstance(app).receivedBtDataDao();
         // Default: keep null until Activity sets it
         targetUserId.setValue(null);
+        sensorId.setValue(null);
     }
 
-    public void setTargetUserId(String userId) { targetUserId.setValue(userId); }
+    public void setTargetUserId(String userId) { 
+        targetUserId.setValue(userId); 
+    }
 
+    /**
+     * Set sensor ID for sensor-specific filtering.
+     * When set, data will be filtered to this specific sensor.
+     */
+    public void setSensorId(@Nullable String sensorId) {
+        this.sensorId.setValue(sensorId);
+    }
+
+    /**
+     * Check if sensor-based filtering is active.
+     */
+    public boolean isSensorMode() {
+        String id = sensorId.getValue();
+        return id != null && !id.isEmpty();
+    }
+
+    /**
+     * Get all data for user OR sensor, depending on which mode is active.
+     */
     public LiveData<List<ReceivedBtDataEntity>> getAllForUser() {
-        return Transformations.switchMap(targetUserId, uid -> {
-            Log.i("UI/TimeLapseVM", "subscribe targetUser=" + uid);
-            if (uid == null) return new MutableLiveData<>(Collections.emptyList());
-            return dao.getAllForUserLive(uid);
+        // If sensorId is set, use sensor-based filtering
+        return Transformations.switchMap(sensorId, sid -> {
+            if (sid != null && !sid.isEmpty()) {
+                Log.i(TAG, "subscribe sensorId=" + sid);
+                return dao.getAllForSensor(sid);
+            }
+            // Otherwise, use user-based filtering
+            return Transformations.switchMap(targetUserId, uid -> {
+                Log.i(TAG, "subscribe targetUser=" + uid);
+                if (uid == null) return new MutableLiveData<>(Collections.emptyList());
+                return dao.getAllForUserLive(uid);
+            });
+        });
+    }
+
+    /**
+     * Get all data for a specific sensor.
+     * Use this when you explicitly want sensor-based data.
+     */
+    public LiveData<List<ReceivedBtDataEntity>> getAllForSensor() {
+        return Transformations.switchMap(sensorId, sid -> {
+            Log.i(TAG, "getAllForSensor sensorId=" + sid);
+            if (sid == null || sid.isEmpty()) {
+                return new MutableLiveData<>(Collections.emptyList());
+            }
+            return dao.getAllForSensor(sid);
         });
     }
 }
