@@ -13,8 +13,9 @@ public final class TargetUserResolver {
         if (session.isAggregator()) {
             return session.getCurrentUserId();
         } else if (session.isSupervisor()) {
-            java.util.List<String> kids = session.getSupervisedUserIds();
-            return (kids == null || kids.isEmpty()) ? null : kids.get(0);
+            // For supervisors, return first supervised sensor ID (for data access)
+            java.util.List<String> sensorIds = session.getSupervisedSensorIds();
+            return (sensorIds == null || sensorIds.isEmpty()) ? null : sensorIds.get(0);
         }
         return null;
     }

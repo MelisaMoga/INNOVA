@@ -175,9 +175,9 @@ public class FirestoreSyncService {
             });
         } else if (userSession.isSupervisor()) {
             Log.i(TAG, "Supervisor user: starting download sync");
-            List<String> supervisedUserIds = userSession.getSupervisedUserIds();
-            if (!supervisedUserIds.isEmpty()) {
-                startSupervisorMirrors(supervisedUserIds);
+            List<String> supervisedSensorIds = userSession.getSupervisedSensorIds();
+            if (!supervisedSensorIds.isEmpty()) {
+                startSupervisorMirrors(supervisedSensorIds);
             }
         }
     }
@@ -622,8 +622,8 @@ public class FirestoreSyncService {
     }
 
     /**
-     * Start supervisor sync - downloads messages from supervised users
-     * @deprecated Use startSupervisorMirrors() instead
+     * Start supervisor sync - downloads messages from supervised sensors
+     * @deprecated Use startSupervisorMirrors() with sensor IDs instead
      */
     @Deprecated
     private void startSupervisorSync() {
@@ -637,17 +637,17 @@ public class FirestoreSyncService {
             return;
         }
 
-        List<String> supervisedUserIds = userSession.getSupervisedUserIds();
-        if (supervisedUserIds.isEmpty()) {
-            Log.w(TAG, "No supervised users found, cannot start supervisor sync");
+        List<String> supervisedSensorIds = userSession.getSupervisedSensorIds();
+        if (supervisedSensorIds.isEmpty()) {
+            Log.w(TAG, "No supervised sensors found, cannot start supervisor sync");
             return;
         }
 
-        Log.i(TAG, "Starting supervisor sync for " + supervisedUserIds.size() + " supervised users");
+        Log.i(TAG, "Starting supervisor sync for " + supervisedSensorIds.size() + " supervised sensors");
         isSupervisorSyncActive = true;
 
-        // Start mirrors for each supervised user
-        startSupervisorMirrors(supervisedUserIds);
+        // Start mirrors for each supervised sensor
+        startSupervisorMirrors(supervisedSensorIds);
     }
 
     /**
@@ -670,31 +670,51 @@ public class FirestoreSyncService {
         }
 
         executorService.execute(() -> {
-            List<String> supervisedUserIds = userSession.getSupervisedUserIds();
-            if (supervisedUserIds.isEmpty()) {
-                callback.onSuccess("No supervised users to sync");
+            List<String> supervisedSensorIds = userSession.getSupervisedSensorIds();
+            if (supervisedSensorIds.isEmpty()) {
+                callback.onSuccess("No supervised sensors to sync");
                 return;
             }
 
-            // For manual sync, do a one-time fetch from all supervised users
-            syncFromSupervisedUsers(supervisedUserIds, callback);
+            // For manual sync, do a one-time fetch for all supervised sensors
+            syncFromSupervisedSensors(supervisedSensorIds, callback);
         });
     }
 
-    /**
-     * Sync data from all supervised users (one-time fetch)
-     */
-    private void syncFromSupervisedUsers(List<String> supervisedUserIds, SyncCallback callback) {
-        List<Task<QuerySnapshot>> tasks = new ArrayList<>();
-        Map<Task<QuerySnapshot>, String> taskToUserId = new HashMap<>();
+    // ========== SENSOR-BASED QUERY OPTIMIZATION ==========
+    // Firestore whereIn limit is 10 values per query
+    private static final int WHEREIN_LIMIT = 10;
 
-        for (String supervisedUserId : supervisedUserIds) {
+    /**
+     * Sync data from all supervised sensors using efficient compound queries.
+     * 
+     * Uses whereIn for batching (up to 10 sensors per query).
+     * This is more efficient than N separate queries.
+     * 
+     * @param sensorIds List of sensor IDs to sync
+     * @param callback Callback for sync result
+     */
+    private void syncFromSupervisedSensors(List<String> sensorIds, SyncCallback callback) {
+        if (sensorIds.isEmpty()) {
+            callback.onSuccess("No sensors to sync");
+            return;
+        }
+
+        Log.i(TAG, "Syncing from " + sensorIds.size() + " supervised sensors");
+        long startTime = System.currentTimeMillis();
+
+        // Batch sensor IDs into groups of WHEREIN_LIMIT (Firestore limit)
+        List<List<String>> batches = batchSensorIds(sensorIds, WHEREIN_LIMIT);
+        Log.d(TAG, "Split into " + batches.size() + " batches for whereIn queries");
+
+        List<Task<QuerySnapshot>> tasks = new ArrayList<>();
+
+        for (List<String> batch : batches) {
             Task<QuerySnapshot> task = firestore.collection(COLLECTION_BT_DATA)
-                    .whereEqualTo("userId", supervisedUserId)
+                    .whereIn("sensorId", batch)
                     .orderBy("timestamp", Query.Direction.ASCENDING)
                     .get();
             tasks.add(task);
-            taskToUserId.put(task, supervisedUserId);
         }
 
         // Wait for all queries to complete
@@ -707,14 +727,20 @@ public class FirestoreSyncService {
                 if (task.isSuccessful()) {
                     QuerySnapshot snapshot = task.getResult();
                     if (snapshot != null) {
-                        String ownerUid = taskToUserId.get(task);
                         for (QueryDocumentSnapshot document : snapshot) {
                             try {
                                 FirestoreDataModel firestoreModel = FirestoreDataModel.fromFirestoreDocument(document.getData());
+                                String sensorId = firestoreModel.getSensorId();
+                                String ownerUid = firestoreModel.getUserId(); // aggregator's UID
+                                
+                                if (sensorId == null) {
+                                    Log.w(TAG, "Document missing sensorId, skipping");
+                                    continue;
+                                }
                                 
                                 // Check if message already exists locally
                                 int exists = dao.messageExistsOwned(
-                                    ownerUid,
+                                    ownerUid != null ? ownerUid : "unknown",
                                     firestoreModel.getDeviceAddress(),
                                     firestoreModel.getTimestamp(),
                                     firestoreModel.getReceivedMsg()
@@ -725,20 +751,23 @@ public class FirestoreSyncService {
                                         firestoreModel.getDeviceAddress(),
                                         firestoreModel.getTimestamp(),
                                         firestoreModel.getReceivedMsg(),
-                                        ownerUid,
-                                        firestoreModel.getSensorId() != null ? firestoreModel.getSensorId() : "unknown"
+                                        ownerUid != null ? ownerUid : "unknown",
+                                        sensorId
                                     );
                                     allEntities.add(entity);
                                 }
                             } catch (Exception e) {
-                                Log.e(TAG, "Error processing supervised user data", e);
+                                Log.e(TAG, "Error processing sensor data", e);
                             }
                         }
                     }
                 } else {
-                    Log.e(TAG, "One of the supervised user queries failed", task.getException());
+                    Log.e(TAG, "One of the sensor batch queries failed", task.getException());
                 }
             }
+
+            long duration = System.currentTimeMillis() - startTime;
+            Log.i(TAG, "Sensor sync completed in " + duration + "ms, " + batches.size() + " queries, " + allEntities.size() + " new entities");
 
             if (allEntities.isEmpty()) {
                 callback.onSuccess("Local database is up to date");
@@ -747,9 +776,26 @@ public class FirestoreSyncService {
                 callback.onSuccess("Added " + allEntities.size() + " missing messages to local database");
             }
         }).addOnFailureListener(e -> {
-            Log.e(TAG, "Failed to sync from supervised users", e);
-            callback.onError("Failed to sync from supervised users: " + e.getMessage());
+            Log.e(TAG, "Failed to sync from supervised sensors", e);
+            callback.onError("Failed to sync from supervised sensors: " + e.getMessage());
         });
+    }
+
+    /**
+     * Batch a list of sensor IDs into groups of specified size.
+     * Required because Firestore whereIn has a limit of 10 values.
+     * 
+     * @param sensorIds Full list of sensor IDs
+     * @param batchSize Maximum batch size (typically 10 for Firestore)
+     * @return List of batches
+     */
+    private List<List<String>> batchSensorIds(List<String> sensorIds, int batchSize) {
+        List<List<String>> batches = new ArrayList<>();
+        for (int i = 0; i < sensorIds.size(); i += batchSize) {
+            int endIndex = Math.min(i + batchSize, sensorIds.size());
+            batches.add(new ArrayList<>(sensorIds.subList(i, endIndex)));
+        }
+        return batches;
     }
 
     /**
@@ -1270,79 +1316,184 @@ public class FirestoreSyncService {
         });
     }
     
+    // ========== SENSOR-BASED REAL-TIME MIRRORS ==========
+    
+    // Compound listener for multiple sensors (when <= WHEREIN_LIMIT)
+    private ListenerRegistration compoundSensorMirror;
+    
     /**
-     * Start supervisor mirrors for all supervised users
+     * Start supervisor mirrors for all supervised sensors.
+     * 
+     * Trade-off decision:
+     * - For <= 10 sensors: Use single compound whereIn listener (fewer connections)
+     * - For > 10 sensors: Use per-sensor listeners (required due to Firestore limit)
+     * 
+     * Single compound listener pros:
+     * - Fewer WebSocket connections
+     * - Lower overhead
+     * 
+     * Per-sensor listener pros:
+     * - More granular error handling
+     * - Can continue if one sensor fails
+     * 
+     * @param sensorIds List of sensor IDs to monitor
      */
-    private void startSupervisorMirrors(List<String> supervisedUserIds) {
-        Log.i(TAG, "Starting supervisor mirrors for " + supervisedUserIds.size() + " users");
+    private void startSupervisorMirrors(List<String> sensorIds) {
+        Log.i(TAG, "Starting sensor mirrors for " + sensorIds.size() + " sensors");
         
-        for (String supervisedUserId : supervisedUserIds) {
-            startSupervisorMirror(supervisedUserId);
+        if (sensorIds.size() <= WHEREIN_LIMIT) {
+            // Use single compound listener for efficiency
+            startCompoundSensorMirror(sensorIds);
+        } else {
+            // Fall back to per-sensor listeners (Firestore whereIn limit)
+            Log.i(TAG, "Using per-sensor listeners (>10 sensors)");
+            for (String sensorId : sensorIds) {
+                startSensorMirror(sensorId);
+            }
         }
     }
     
     /**
-     * Start a single supervisor mirror for a specific supervised user
+     * Start a compound sensor mirror for multiple sensors (up to 10).
+     * Uses whereIn for efficiency - single listener for all sensors.
+     * 
+     * @param sensorIds List of sensor IDs (max 10)
      */
-    public void startSupervisorMirror(String supervisedUserId) {
+    public void startCompoundSensorMirror(List<String> sensorIds) {
+        if (sensorIds.isEmpty()) {
+            Log.w(TAG, "No sensor IDs provided for compound mirror");
+            return;
+        }
+        
+        if (sensorIds.size() > WHEREIN_LIMIT) {
+            Log.w(TAG, "Too many sensors for compound mirror (" + sensorIds.size() + "), falling back to per-sensor");
+            for (String sensorId : sensorIds) {
+                startSensorMirror(sensorId);
+            }
+            return;
+        }
+        
+        // Stop existing compound mirror if any
+        if (compoundSensorMirror != null) {
+            compoundSensorMirror.remove();
+            Log.d(TAG, "Stopped existing compound sensor mirror");
+        }
+        
+        Log.i("SYNC/Mirror", "Starting compound sensor mirror for " + sensorIds.size() + " sensors: " + sensorIds);
+        
+        compoundSensorMirror = firestore.collection(COLLECTION_BT_DATA)
+                .whereIn("sensorId", sensorIds)
+                .orderBy("timestamp", Query.Direction.ASCENDING)
+                .addSnapshotListener((queryDocumentSnapshots, e) -> {
+                    if (e != null) {
+                        Log.e("SYNC/Mirror", "Compound mirror error: " + e.getMessage());
+                        return;
+                    }
+                    if (queryDocumentSnapshots == null) {
+                        Log.w("SYNC/Mirror", "Null snapshot for compound mirror");
+                        return;
+                    }
+                    Log.i("SYNC/Mirror", "Compound mirror event: docs=" + queryDocumentSnapshots.size() + 
+                          " fromCache=" + queryDocumentSnapshots.getMetadata().isFromCache());
+
+                    executorService.execute(() -> {
+                        handleSensorDocumentChanges(queryDocumentSnapshots.getDocumentChanges());
+                    });
+                });
+        
+        Log.i(TAG, "Compound sensor mirror started for " + sensorIds.size() + " sensors");
+    }
+    
+    /**
+     * Start a single sensor mirror for a specific sensor ID.
+     * Used when there are more than 10 sensors (exceeds whereIn limit).
+     * 
+     * @param sensorId The sensor ID to monitor
+     */
+    public void startSensorMirror(String sensorId) {
         // Check if already active
-        if (mirrorByUid.containsKey(supervisedUserId)) {
-            Log.d(TAG, "Mirror already active for " + supervisedUserId);
+        if (mirrorByUid.containsKey(sensorId)) {
+            Log.d(TAG, "Mirror already active for sensor " + sensorId);
             return;
         }
         
         // Check if start is in flight
-        if (startingUids.contains(supervisedUserId)) {
-            Log.d(TAG, "Mirror start already in flight for " + supervisedUserId);
+        if (startingUids.contains(sensorId)) {
+            Log.d(TAG, "Mirror start already in flight for sensor " + sensorId);
             return;
         }
         
-        startingUids.add(supervisedUserId);
-        Log.i("SYNC/Mirror", "Attach listener for childUid=" + supervisedUserId + " query=userId==childUid orderBy timestamp");
+        startingUids.add(sensorId);
+        Log.i("SYNC/Mirror", "Attach listener for sensorId=" + sensorId);
         
         ListenerRegistration listener = firestore.collection(COLLECTION_BT_DATA)
-                .whereEqualTo("userId", supervisedUserId)
+                .whereEqualTo("sensorId", sensorId)
                 .orderBy("timestamp", Query.Direction.ASCENDING)
                 .addSnapshotListener((queryDocumentSnapshots, e) -> {
                     if (e != null) {
-                        Log.e("SYNC/Mirror", "Listen error for " + supervisedUserId + ": " + e.getMessage());
+                        Log.e("SYNC/Mirror", "Listen error for sensor " + sensorId + ": " + e.getMessage());
                         return;
                     }
                     if (queryDocumentSnapshots == null) {
-                        Log.w("SYNC/Mirror", "Null snapshot for " + supervisedUserId);
+                        Log.w("SYNC/Mirror", "Null snapshot for sensor " + sensorId);
                         return;
                     }
-                    Log.i("SYNC/Mirror", "Event for " + supervisedUserId + ": docs=" + queryDocumentSnapshots.size() + " fromCache=" + queryDocumentSnapshots.getMetadata().isFromCache());
+                    Log.i("SYNC/Mirror", "Event for sensor " + sensorId + ": docs=" + queryDocumentSnapshots.size() + 
+                          " fromCache=" + queryDocumentSnapshots.getMetadata().isFromCache());
 
                     executorService.execute(() -> {
-                        handleSupervisorDocumentChanges(queryDocumentSnapshots.getDocumentChanges(), supervisedUserId);
+                        handleSensorDocumentChanges(queryDocumentSnapshots.getDocumentChanges());
                     });
                 });
 
-        mirrorByUid.put(supervisedUserId, listener);
-        startingUids.remove(supervisedUserId);
-        Log.i(TAG, "Supervisor mirror started for " + supervisedUserId);
+        mirrorByUid.put(sensorId, listener);
+        startingUids.remove(sensorId);
+        Log.i(TAG, "Sensor mirror started for " + sensorId);
     }
     
     /**
-     * Stop a single supervisor mirror
+     * @deprecated Use {@link #startSensorMirror(String)} instead.
      */
-    public void stopSupervisorMirror(String supervisedUserId) {
-        ListenerRegistration listener = mirrorByUid.remove(supervisedUserId);
+    @Deprecated
+    public void startSupervisorMirror(String supervisedUserId) {
+        startSensorMirror(supervisedUserId);
+    }
+    
+    /**
+     * Stop a single sensor mirror
+     */
+    public void stopSensorMirror(String sensorId) {
+        ListenerRegistration listener = mirrorByUid.remove(sensorId);
         if (listener != null) {
             listener.remove();
-            Log.d("SYNC/Mirror", "Detach listener for childUid=" + supervisedUserId + " reason=manual_stop");
-            Log.i(TAG, "Stopped supervisor mirror for " + supervisedUserId);
+            Log.d("SYNC/Mirror", "Detach listener for sensorId=" + sensorId);
+            Log.i(TAG, "Stopped sensor mirror for " + sensorId);
         }
-        startingUids.remove(supervisedUserId);
+        startingUids.remove(sensorId);
     }
     
     /**
-     * Stop all supervisor mirrors
+     * @deprecated Use {@link #stopSensorMirror(String)} instead.
+     */
+    @Deprecated
+    public void stopSupervisorMirror(String supervisedUserId) {
+        stopSensorMirror(supervisedUserId);
+    }
+    
+    /**
+     * Stop all sensor mirrors (both compound and per-sensor)
      */
     public void stopAllMirrors() {
-        Log.i(TAG, "Stopping all supervisor mirrors");
+        Log.i(TAG, "Stopping all sensor mirrors");
         
+        // Stop compound mirror if active
+        if (compoundSensorMirror != null) {
+            compoundSensorMirror.remove();
+            compoundSensorMirror = null;
+            Log.d(TAG, "Stopped compound sensor mirror");
+        }
+        
+        // Stop per-sensor mirrors
         for (Map.Entry<String, ListenerRegistration> entry : mirrorByUid.entrySet()) {
             entry.getValue().remove();
         }
@@ -1363,8 +1514,90 @@ public class FirestoreSyncService {
     }
     
     /**
-     * Handle document changes from supervisor listeners with owner assignment
+     * Handle document changes from sensor-based listeners.
+     * Used by both compound and per-sensor mirrors.
+     * 
+     * Extracts sensorId and ownerUid (aggregator) from each document.
      */
+    private void handleSensorDocumentChanges(List<DocumentChange> documentChanges) {
+        List<ReceivedBtDataEntity> entitiesToInsert = new ArrayList<>();
+        long now = System.currentTimeMillis();
+
+        final long RECENT_MS = 60_000 * 60 * 24; // alert only if within 24 hours
+
+        for (DocumentChange change : documentChanges) {
+            if (change.getType() == DocumentChange.Type.ADDED || change.getType() == DocumentChange.Type.MODIFIED) {
+                try {
+                    FirestoreDataModel firestoreModel = FirestoreDataModel.fromFirestoreDocument(change.getDocument().getData());
+                    
+                    String sensorId = firestoreModel.getSensorId();
+                    String ownerUid = firestoreModel.getUserId(); // aggregator's UID
+                    
+                    if (sensorId == null || sensorId.isEmpty()) {
+                        Log.w(TAG, "Document missing sensorId, skipping");
+                        continue;
+                    }
+                    
+                    // Check if message already exists locally
+                    int exists = dao.messageExistsOwned(
+                        ownerUid != null ? ownerUid : "unknown",
+                        firestoreModel.getDeviceAddress(),
+                        firestoreModel.getTimestamp(),
+                        firestoreModel.getReceivedMsg()
+                    );
+
+                    if (exists == 0) {
+                        Long ts = firestoreModel.getTimestamp();
+                        String msg = firestoreModel.getReceivedMsg();
+                        
+                        ReceivedBtDataEntity entity = new ReceivedBtDataEntity(
+                            firestoreModel.getDeviceAddress(),
+                            ts != null ? ts : 0L,
+                            msg != null ? msg : "",
+                            ownerUid != null ? ownerUid : "unknown",
+                            sensorId
+                        );
+                        entitiesToInsert.add(entity);
+                        Log.d(TAG, "New message from sensor " + sensorId + ": " + entity.getReceivedMsg());
+
+                        // If this looks like a fall AND it's recent, notify on supervisor phone
+                        if (msg != null && ts != null && (now - ts) <= RECENT_MS) {
+                            Posture p = com.melisa.innovamotionapp.data.posture.PostureFactory.createPosture(msg);
+                            if (p instanceof com.melisa.innovamotionapp.data.posture.types.FallingPosture) {
+                                // Use PersonNameManager to get display name for notification
+                                final String finalSensorId = sensorId;
+                                com.melisa.innovamotionapp.utils.PersonNameManager.getInstance(context)
+                                    .getDisplayNameAsync(finalSensorId, displayName -> {
+                                        String body = displayName + " " 
+                                                + context.getString(com.melisa.innovamotionapp.R.string.notif_fall_text_generic);
+                                        
+                                        com.melisa.innovamotionapp.utils.AlertNotifications.notifyFall(
+                                                context,
+                                                displayName,
+                                                body
+                                        );
+                                    });
+                            }
+                        }
+                    }
+                } catch (Exception e) {
+                    Log.e(TAG, "Error processing sensor document change", e);
+                }
+            }
+        }
+
+        // Insert new messages into local Room database
+        if (!entitiesToInsert.isEmpty()) {
+            dao.insertAll(entitiesToInsert);
+            Log.i(TAG, "Inserted " + entitiesToInsert.size() + " new messages from sensor mirror");
+        }
+    }
+    
+    /**
+     * Handle document changes from supervisor listeners with owner assignment
+     * @deprecated Use {@link #handleSensorDocumentChanges(List)} instead
+     */
+    @Deprecated
     private void handleSupervisorDocumentChanges(List<DocumentChange> documentChanges, String supervisedUserId) {
         List<ReceivedBtDataEntity> entitiesToInsert = new ArrayList<>();
         long now = System.currentTimeMillis();

@@ -290,10 +290,19 @@ public class SessionGate {
     }
     
     /**
-     * Get supervised user IDs
+     * Get supervised sensor IDs (for supervisor role).
+     * These are the sensor IDs that this supervisor is allowed to monitor.
      */
+    public List<String> getSupervisedSensorIds() {
+        return supervisedUserIds; // Field is named for backward compat, but contains sensor IDs
+    }
+    
+    /**
+     * @deprecated Use {@link #getSupervisedSensorIds()} instead.
+     */
+    @Deprecated
     public List<String> getSupervisedUserIds() {
-        return supervisedUserIds;
+        return getSupervisedSensorIds();
     }
     
     /**

@@ -169,7 +169,14 @@ public interface ReceivedBtDataDao {
      * Get the latest reading for each sensor (one row per person).
      * Used for dashboard view showing all monitored persons with their current posture.
      * 
-     * Note: Uses subquery to get the max timestamp per sensor, then joins to get full row.
+     * QUERY OPTIMIZATION NOTE:
+     * This query is efficient because it:
+     * 1. Uses a subquery to find max timestamp per sensor (single pass)
+     * 2. Joins back to get full row data
+     * 3. Avoids N+1 queries (one query for all sensors, not one per sensor)
+     * 
+     * Performance: O(n) where n = total rows, regardless of sensor count.
+     * Much better than N separate queries where N = sensor count.
      */
     @Query("SELECT r.* FROM received_bt_data r " +
            "INNER JOIN (SELECT sensor_id, MAX(timestamp) as max_ts FROM received_bt_data GROUP BY sensor_id) latest " +
