@@ -1,0 +1,179 @@
+package com.melisa.innovamotionapp.ui.viewmodels;
+
+import android.app.Application;
+
+import androidx.annotation.NonNull;
+import androidx.lifecycle.AndroidViewModel;
+import androidx.lifecycle.LiveData;
+import androidx.lifecycle.MutableLiveData;
+import androidx.lifecycle.Transformations;
+
+import com.melisa.innovamotionapp.R;
+import com.melisa.innovamotionapp.data.database.InnovaDatabase;
+import com.melisa.innovamotionapp.data.database.ReceivedBtDataDao;
+import com.melisa.innovamotionapp.data.database.ReceivedBtDataEntity;
+import com.melisa.innovamotionapp.ui.models.MessageLogItem;
+import com.melisa.innovamotionapp.utils.PersonNameManager;
+
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+
+/**
+ * ViewModel for the Message Log UI.
+ * 
+ * Transforms raw database entities into UI-ready MessageLogItem objects,
+ * resolving sensor IDs to display names and determining posture icons.
+ */
+public class MessageLogViewModel extends AndroidViewModel {
+
+    private static final int DEFAULT_MESSAGE_LIMIT = 500;
+    
+    // Posture hex codes (lowercase for comparison)
+    private static final String HEX_STANDING = "0xab3311";
+    private static final String HEX_SITTING = "0xac4312";
+    private static final String HEX_WALKING = "0xba3311";
+    private static final String HEX_FALLING = "0xef0112";
+    private static final String HEX_UNUSED = "0x793248";
+
+    private final ReceivedBtDataDao dao;
+    private final PersonNameManager personNameManager;
+    
+    // Filter state
+    private final MutableLiveData<String> filterSensor = new MutableLiveData<>(null);
+    
+    // Transformed data
+    private final LiveData<List<MessageLogItem>> messages;
+    private final LiveData<List<String>> availableSensors;
+    private final LiveData<Map<String, Integer>> messageCountsPerSensor;
+
+    public MessageLogViewModel(@NonNull Application application) {
+        super(application);
+        dao = InnovaDatabase.getInstance(application).receivedBtDataDao();
+        personNameManager = PersonNameManager.getInstance(application);
+        
+        // Get recent messages (limit to last 500)
+        LiveData<List<ReceivedBtDataEntity>> rawMessages = dao.getRecentMessages(DEFAULT_MESSAGE_LIMIT);
+        
+        // Transform to UI model with person names based on filter
+        messages = Transformations.switchMap(filterSensor, sensor -> {
+            LiveData<List<ReceivedBtDataEntity>> filtered;
+            if (sensor == null || sensor.isEmpty()) {
+                filtered = rawMessages;
+            } else {
+                filtered = dao.getMessagesForSensor(sensor, DEFAULT_MESSAGE_LIMIT);
+            }
+            
+            return Transformations.map(filtered, this::transformToMessageLogItems);
+        });
+        
+        // Available sensors for filter dropdown
+        availableSensors = dao.getDistinctSensorIds();
+        
+        // Message counts per sensor (for summary header)
+        messageCountsPerSensor = Transformations.map(rawMessages, entities -> {
+            Map<String, Integer> counts = new HashMap<>();
+            if (entities != null) {
+                for (ReceivedBtDataEntity entity : entities) {
+                    String sensor = entity.getSensorId();
+                    counts.put(sensor, counts.getOrDefault(sensor, 0) + 1);
+                }
+            }
+            return counts;
+        });
+    }
+
+    /**
+     * Transform database entities to UI items.
+     */
+    private List<MessageLogItem> transformToMessageLogItems(List<ReceivedBtDataEntity> entities) {
+        List<MessageLogItem> items = new ArrayList<>();
+        if (entities == null) return items;
+        
+        for (ReceivedBtDataEntity entity : entities) {
+            String displayName = personNameManager.getDisplayName(entity.getSensorId());
+            int iconRes = getPostureIcon(entity.getReceivedMsg());
+            boolean isFall = isFallPosture(entity.getReceivedMsg());
+            
+            items.add(new MessageLogItem(
+                    entity.getId(),
+                    entity.getTimestamp(),
+                    entity.getSensorId(),
+                    displayName,
+                    entity.getReceivedMsg(),
+                    iconRes,
+                    isFall
+            ));
+        }
+        return items;
+    }
+
+    /**
+     * Get drawable resource for a posture hex code.
+     */
+    private int getPostureIcon(String hexCode) {
+        if (hexCode == null) return R.drawable.ic_posture_unknown;
+        
+        String normalized = hexCode.toLowerCase();
+        switch (normalized) {
+            case HEX_STANDING:
+                return R.drawable.ic_posture_standing;
+            case HEX_SITTING:
+                return R.drawable.ic_posture_sitting;
+            case HEX_WALKING:
+                return R.drawable.ic_posture_walking;
+            case HEX_FALLING:
+                return R.drawable.ic_posture_falling;
+            case HEX_UNUSED:
+                return R.drawable.ic_posture_unknown;
+            default:
+                return R.drawable.ic_posture_unknown;
+        }
+    }
+
+    /**
+     * Check if a hex code represents a fall posture.
+     */
+    private boolean isFallPosture(String hexCode) {
+        if (hexCode == null) return false;
+        return hexCode.toLowerCase().equals(HEX_FALLING);
+    }
+
+    // ========== Public API ==========
+
+    /**
+     * Set the sensor filter. Pass null or empty string to show all.
+     */
+    public void setFilterSensor(String sensor) {
+        filterSensor.setValue(sensor);
+    }
+
+    /**
+     * Get current filter value.
+     */
+    public String getCurrentFilter() {
+        return filterSensor.getValue();
+    }
+
+    /**
+     * Get transformed messages for UI display.
+     */
+    public LiveData<List<MessageLogItem>> getMessages() {
+        return messages;
+    }
+
+    /**
+     * Get list of available sensor IDs for filter dropdown.
+     */
+    public LiveData<List<String>> getAvailableSensors() {
+        return availableSensors;
+    }
+
+    /**
+     * Get message counts per sensor for summary header.
+     */
+    public LiveData<Map<String, Integer>> getMessageCountsPerSensor() {
+        return messageCountsPerSensor;
+    }
+}

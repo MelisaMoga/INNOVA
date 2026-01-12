@@ -115,4 +115,14 @@
     <!-- fall notification -->
     <string name="notif_fall_title">Fall Detected: %1$s</string>
     <string name="notif_fall_text_generic">may have fallen. Check immediately.</string>
+
+    <!-- Aggregator Dashboard -->
+    <string name="tab_message_log">Messages</string>
+    <string name="tab_live_posture">Posture</string>
+    <string name="filter_label">Filter:</string>
+    <string name="filter_all_sensors">All Sensors</string>
+    <string name="auto_scroll_label">Auto-scroll</string>
+    <string name="no_messages">No messages yet</string>
+    <string name="posture_icon_desc">Posture icon</string>
+    <string name="live_posture_placeholder">Live Posture Viewer\n\nComing in Task 6</string>
 </resources>

@@ -216,6 +216,22 @@ public interface ReceivedBtDataDao {
         public int count;
     }
 
+    // ======== MESSAGE LOG UI QUERIES ========
+    
+    /**
+     * Get recent messages across all sensors, ordered by timestamp descending.
+     * Used for the message log UI.
+     */
+    @Query("SELECT * FROM received_bt_data ORDER BY timestamp DESC LIMIT :limit")
+    LiveData<List<ReceivedBtDataEntity>> getRecentMessages(int limit);
+
+    /**
+     * Get recent messages for a specific sensor, ordered by timestamp descending.
+     * Used for filtered message log UI.
+     */
+    @Query("SELECT * FROM received_bt_data WHERE sensor_id = :sensorId ORDER BY timestamp DESC LIMIT :limit")
+    LiveData<List<ReceivedBtDataEntity>> getMessagesForSensor(String sensorId, int limit);
+
     // TEMPORARY DEBUG HELPERS (remove later)
     @Query("SELECT COUNT(*) FROM received_bt_data")
     int dbgCountAll();
