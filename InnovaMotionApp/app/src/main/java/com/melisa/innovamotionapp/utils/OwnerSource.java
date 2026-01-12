@@ -17,12 +17,12 @@ public final class OwnerSource {
             return global.currentUserUid;
         }
         if ("supervisor".equals(role)) {
-            List<String> childs = global.supervisedUserIds;
-            if (childs != null && !childs.isEmpty()) {
-                Log.i("UI/Owner", "role=supervisor -> owner=" + childs.get(0));
-                return childs.get(0);
+            List<String> sensorIds = global.supervisedSensorIds;
+            if (sensorIds != null && !sensorIds.isEmpty()) {
+                Log.i("UI/Owner", "role=supervisor -> sensorId=" + sensorIds.get(0));
+                return sensorIds.get(0);
             }
-            Log.e("UI/Owner", "role=supervisor but no supervisedUserIds!");
+            Log.e("UI/Owner", "role=supervisor but no supervisedSensorIds!");
             return null;
         }
         Log.e("UI/Owner", "UNKNOWN role; cannot resolve owner");

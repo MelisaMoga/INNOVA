@@ -24,8 +24,8 @@ import java.util.List;
  * MANUAL TEST CHECKLIST:
  * =====================
  * 
- * 1. SUPERVISED USER TESTS:
- *    □ Sign in as supervised user
+ * 1. AGGREGATOR USER TESTS:
+ *    □ Sign in as aggregator user
  *    □ Connect Bluetooth device and receive messages
  *    □ Verify messages appear in local Room database
  *    □ Verify messages sync to Firestore when online
@@ -34,9 +34,9 @@ import java.util.List;
  *    □ Check no duplicate messages in Room after sync
  * 
  * 2. SUPERVISOR USER TESTS:
- *    □ Sign in as supervisor with supervised email
- *    □ Verify supervisor can see supervised user's messages in local Room
- *    □ Test real-time sync: supervised user sends message, supervisor sees it
+ *    □ Sign in as supervisor with aggregator email
+ *    □ Verify supervisor can see aggregator's sensor messages in local Room
+ *    □ Test real-time sync: aggregator sends message, supervisor sees it
  *    □ Test offline supervisor: disconnect internet, reconnect
  *    □ Verify supervisor resumes downloading when back online
  *    □ Check no duplicate messages in Room after sync
@@ -45,10 +45,10 @@ import java.util.List;
  *    □ Sign in as supervisor and tap "Monitoring" button
  *    □ Verify direct navigation to BtConnectedActivity (skips scanning)
  *    □ Check that latest posture from Room is displayed immediately
- *    □ Verify real-time updates as new supervised data arrives
+ *    □ Verify real-time updates as new sensor data arrives
  *    □ Test that supervisors don't exit when Bluetooth disconnects
  *    □ Verify BtSettingsActivity redirects supervisors automatically
- *    □ Test supervisor can monitor specific devices (extended feature)
+ *    □ Test supervisor can monitor specific sensors (extended feature)
  * 
  * 4. CONNECTIVITY TESTS:
  *    □ Toggle airplane mode on/off
@@ -58,7 +58,7 @@ import java.util.List;
  * 
  * 5. ERROR HANDLING TESTS:
  *    □ Test with invalid user role
- *    □ Test with missing supervised users
+ *    □ Test with missing sensors
  *    □ Test with Firestore permission errors
  *    □ Verify graceful degradation (app doesn't crash)
  * 
@@ -150,7 +150,7 @@ public class SyncActivity extends AppCompatActivity implements SyncManager.SyncP
         if (userSession.isLoaded()) {
             String userInfo = "User ID: " + userSession.getCurrentUserId() + "\n" +
                              "Role: " + userSession.getRole() + "\n" +
-                             "Supervised User IDs: " + userSession.getSupervisedUserIds().toString();
+                             "Supervised Sensor IDs: " + userSession.getSupervisedSensorIds().toString();
             
             if (txtUserInfo != null) {
                 txtUserInfo.setText(userInfo);
@@ -223,7 +223,7 @@ public class SyncActivity extends AppCompatActivity implements SyncManager.SyncP
     }
     
     /**
-     * Manual backfill trigger for testing (supervised users only)
+     * Manual backfill trigger for testing (aggregator users only)
      */
     private void performBackfill() {
         firestoreSyncService.backfillLocalFromCloudForCurrentUser(new FirestoreSyncService.SyncCallback() {
@@ -250,7 +250,7 @@ public class SyncActivity extends AppCompatActivity implements SyncManager.SyncP
     }
     
     /**
-     * Manual paged backfill trigger for testing (supervised users only)
+     * Manual paged backfill trigger for testing (aggregator users only)
      */
     private void performPagedBackfill() {
         firestoreSyncService.backfillLocalFromCloudForCurrentUserPaged(new FirestoreSyncService.SyncCallback() {

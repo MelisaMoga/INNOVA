@@ -87,7 +87,7 @@ public class SessionGate {
         // Update GlobalData singleton with session info
         GlobalData.getInstance().setCurrentUserUid(userId);
         GlobalData.getInstance().setCurrentUserRole(role);
-        GlobalData.getInstance().setSupervisedUserIds(supervisedUserIds);
+        GlobalData.getInstance().setSupervisedSensorIds(supervisedUserIds);
     }
     
     /**

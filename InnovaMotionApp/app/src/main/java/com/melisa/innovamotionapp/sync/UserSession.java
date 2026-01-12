@@ -189,10 +189,9 @@ public class UserSession {
     
     /**
      * Check if current user is aggregator role (collects data from sensors, uploads to cloud).
-     * Formerly known as "supervised" role.
      */
     public boolean isAggregator() {
-        return "aggregator".equals(role) || "supervised".equals(role); // Support both for backward compat
+        return "aggregator".equals(role);
     }
     
     /**

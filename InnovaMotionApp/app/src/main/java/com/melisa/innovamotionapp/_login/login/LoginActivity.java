@@ -57,8 +57,8 @@ import java.util.ArrayList;
 /**
  * LoginActivity with online-only sign-in flow that pre-fills user preferences:
  * 
- * - For SUPERVISORS: Pre-fills the supervised email field from server data
- * - For SUPERVISED accounts: Pre-fills the radio button selection from server data  
+ * - For SUPERVISORS: Pre-fills the aggregator email field from server data
+ * - For AGGREGATOR accounts: Pre-fills the radio button selection from server data  
  * - Users can edit any pre-filled values before proceeding
  * - All preferences are fetched fresh from server on each sign-in (no local caching)
  */
@@ -74,11 +74,11 @@ public class LoginActivity extends AppCompatActivity {
     private MaterialButton signOutButton;
     private MaterialButton proceedButton;
     private View signedInSection;
-    private TextInputEditText supervisedEmailInput;
-    private TextInputLayout supervisedEmailLayout;
+    private TextInputEditText aggregatorEmailInput;
+    private TextInputLayout aggregatorEmailLayout;
     private RadioGroup roleGroup;
     private RadioButton roleSupervisor;
-    private RadioButton roleSupervised;
+    private RadioButton roleAggregator;
     private TextView signedInAsText;
     private View loadingProgress;
 
@@ -86,7 +86,7 @@ public class LoginActivity extends AppCompatActivity {
     private PopupWindow suggestionPopup;
     private ListView suggestionListView;
     private ArrayAdapter<String> emailAdapter;
-    private List<String> supervisedEmails;
+    private List<String> aggregatorEmails;
     private Handler searchHandler;
     private Runnable searchRunnable;
     private boolean isSettingTextProgrammatically = false;
@@ -125,11 +125,11 @@ public class LoginActivity extends AppCompatActivity {
         googleSignInButton = findViewById(R.id.google_sign_in_button);
         signOutButton = findViewById(R.id.sign_out_button);
         proceedButton = findViewById(R.id.proceed_button);
-        supervisedEmailInput = findViewById(R.id.supervised_email);
-        supervisedEmailLayout = findViewById(R.id.supervised_email_layout);
+        aggregatorEmailInput = findViewById(R.id.aggregator_email);
+        aggregatorEmailLayout = findViewById(R.id.aggregator_email_layout);
         roleGroup = findViewById(R.id.role_group);
         roleSupervisor = findViewById(R.id.role_supervisor);
-        roleSupervised = findViewById(R.id.role_supervised);
+        roleAggregator = findViewById(R.id.role_aggregator);
         signedInAsText = findViewById(R.id.signed_in_as_text);
         signedInSection = findViewById(R.id.signed_in_section);
         loadingProgress = findViewById(R.id.loading);
@@ -141,15 +141,15 @@ public class LoginActivity extends AppCompatActivity {
         Log.d(TAG, "Setting up email autocomplete functionality");
         
         // Initialize autocomplete components
-        supervisedEmails = new ArrayList<>();
-        emailAdapter = new ArrayAdapter<>(this, R.layout.autocomplete_item, supervisedEmails);
+        aggregatorEmails = new ArrayList<>();
+        emailAdapter = new ArrayAdapter<>(this, R.layout.autocomplete_item, aggregatorEmails);
         searchHandler = new Handler(Looper.getMainLooper());
         
-        if (supervisedEmailInput != null) {
+        if (aggregatorEmailInput != null) {
             createSuggestionPopup();
             
             // Add text change listener for real-time search
-            supervisedEmailInput.addTextChangedListener(new TextWatcher() {
+            aggregatorEmailInput.addTextChangedListener(new TextWatcher() {
                 @Override
                 public void beforeTextChanged(CharSequence s, int start, int count, int after) {}
 
@@ -167,7 +167,7 @@ public class LoginActivity extends AppCompatActivity {
                     
                     // Schedule new search with delay to avoid too many requests
                     if (s.length() > 1) {
-                        searchRunnable = () -> searchSupervisedUsers(s.toString());
+                        searchRunnable = () -> searchAggregatorUsers(s.toString());
                         searchHandler.postDelayed(searchRunnable, 300); // 300ms delay
                     } else {
                         // Hide popup when input is too short
@@ -180,7 +180,7 @@ public class LoginActivity extends AppCompatActivity {
             });
             
             // Hide popup when focus is lost
-            supervisedEmailInput.setOnFocusChangeListener((v, hasFocus) -> {
+            aggregatorEmailInput.setOnFocusChangeListener((v, hasFocus) -> {
                 if (!hasFocus) {
                     hideSuggestionPopup();
                 }
@@ -201,16 +201,16 @@ public class LoginActivity extends AppCompatActivity {
         
         // Handle item clicks
         suggestionListView.setOnItemClickListener((parent, view, position, id) -> {
-            String selectedEmail = supervisedEmails.get(position);
-            Log.d(TAG, "Selected supervised email from suggestions: " + selectedEmail);
+            String selectedEmail = aggregatorEmails.get(position);
+            Log.d(TAG, "Selected aggregator email from suggestions: " + selectedEmail);
             
             // Set flag to prevent triggering search when setting text programmatically
             isSettingTextProgrammatically = true;
-            supervisedEmailInput.setText(selectedEmail);
-            supervisedEmailInput.setSelection(selectedEmail.length());
+            aggregatorEmailInput.setText(selectedEmail);
+            aggregatorEmailInput.setSelection(selectedEmail.length());
             isSettingTextProgrammatically = false;
             
-            supervisedEmailLayout.setError(null);
+            aggregatorEmailLayout.setError(null);
             hideSuggestionPopup();
         });
         
@@ -235,11 +235,11 @@ public class LoginActivity extends AppCompatActivity {
             roleGroup.setOnCheckedChangeListener((group, checkedId) -> {
                 if (checkedId == R.id.role_supervisor) {
                     Log.d(TAG, "Supervisor role selected - showing email input");
-                    supervisedEmailLayout.setVisibility(View.VISIBLE);
-                } else if (checkedId == R.id.role_supervised) {
-                    Log.d(TAG, "Supervised role selected - hiding email input");
-                    supervisedEmailLayout.setVisibility(View.GONE);
-                    supervisedEmailLayout.setError(null);
+                    aggregatorEmailLayout.setVisibility(View.VISIBLE);
+                } else if (checkedId == R.id.role_aggregator) {
+                    Log.d(TAG, "Aggregator role selected - hiding email input");
+                    aggregatorEmailLayout.setVisibility(View.GONE);
+                    aggregatorEmailLayout.setError(null);
                 }
             });
         }
@@ -408,54 +408,54 @@ public class LoginActivity extends AppCompatActivity {
                 .addOnSuccessListener(document -> {
                     if (document.exists()) {
                         String role = document.getString("role");
-                        String supervisedEmail = document.getString("supervisedEmail");
+                        String aggregatorEmail = document.getString("aggregatorEmail");
                         String lastSelectedRole = document.getString("lastSelectedRole");
                         
                         Log.d(TAG, "Retrieved preferences - role: " + role + 
-                               ", supervisedEmail: " + supervisedEmail + 
+                               ", aggregatorEmail: " + aggregatorEmail + 
                                ", lastSelectedRole: " + lastSelectedRole);
                         
                         runOnUiThread(() -> {
                             hideLoading();
                             
                             // Pre-fill based on user type
-                            if ("supervisor".equals(role) && supervisedEmail != null && !supervisedEmail.isEmpty()) {
-                                // Pre-fill supervised email for supervisors
-                                preFillSupervisedEmail(supervisedEmail);
+                            if ("supervisor".equals(role) && aggregatorEmail != null && !aggregatorEmail.isEmpty()) {
+                                // Pre-fill aggregator email for supervisors
+                                preFillAggregatorEmail(aggregatorEmail);
                                 roleSupervisor.setChecked(true);
-                                supervisedEmailLayout.setVisibility(View.VISIBLE);
-                                Log.d(TAG, "Pre-filled supervised email for supervisor: " + supervisedEmail);
-                            } else if ("supervised".equals(role)) {
-                                // Pre-fill role selection for supervised accounts
-                                roleSupervised.setChecked(true);
-                                supervisedEmailLayout.setVisibility(View.GONE);
-                                Log.d(TAG, "Pre-filled supervised role selection");
+                                aggregatorEmailLayout.setVisibility(View.VISIBLE);
+                                Log.d(TAG, "Pre-filled aggregator email for supervisor: " + aggregatorEmail);
+                            } else if ("aggregator".equals(role)) {
+                                // Pre-fill role selection for aggregator accounts
+                                roleAggregator.setChecked(true);
+                                aggregatorEmailLayout.setVisibility(View.GONE);
+                                Log.d(TAG, "Pre-filled aggregator role selection");
                             } else if (lastSelectedRole != null) {
                                 // Pre-fill last selected role for users without a set role
                                 if ("supervisor".equals(lastSelectedRole)) {
                                     roleSupervisor.setChecked(true);
-                                    supervisedEmailLayout.setVisibility(View.VISIBLE);
-                                    if (supervisedEmail != null && !supervisedEmail.isEmpty()) {
-                                        preFillSupervisedEmail(supervisedEmail);
+                                    aggregatorEmailLayout.setVisibility(View.VISIBLE);
+                                    if (aggregatorEmail != null && !aggregatorEmail.isEmpty()) {
+                                        preFillAggregatorEmail(aggregatorEmail);
                                     }
                                 } else {
-                                    roleSupervised.setChecked(true);
-                                    supervisedEmailLayout.setVisibility(View.GONE);
+                                    roleAggregator.setChecked(true);
+                                    aggregatorEmailLayout.setVisibility(View.GONE);
                                 }
                                 Log.d(TAG, "Pre-filled last selected role: " + lastSelectedRole);
                             } else {
-                                // Default to supervised if no preferences found
-                                roleSupervised.setChecked(true);
-                                supervisedEmailLayout.setVisibility(View.GONE);
-                                Log.d(TAG, "No preferences found, defaulting to supervised role");
+                                // Default to aggregator if no preferences found
+                                roleAggregator.setChecked(true);
+                                aggregatorEmailLayout.setVisibility(View.GONE);
+                                Log.d(TAG, "No preferences found, defaulting to aggregator role");
                             }
                         });
                     } else {
                         Log.d(TAG, "No user document found, using defaults");
                         runOnUiThread(() -> {
                             hideLoading();
-                            roleSupervised.setChecked(true);
-                            supervisedEmailLayout.setVisibility(View.GONE);
+                            roleAggregator.setChecked(true);
+                            aggregatorEmailLayout.setVisibility(View.GONE);
                         });
                     }
                 })
@@ -464,22 +464,22 @@ public class LoginActivity extends AppCompatActivity {
                     runOnUiThread(() -> {
                         hideLoading();
                         // Continue with defaults if fetch fails
-                        roleSupervised.setChecked(true);
-                        supervisedEmailLayout.setVisibility(View.GONE);
+                        roleAggregator.setChecked(true);
+                        aggregatorEmailLayout.setVisibility(View.GONE);
                         showErrorToast(getString(R.string.preferences_load_failed));
                     });
                 });
     }
 
-    private void preFillSupervisedEmail(String email) {
-        if (supervisedEmailInput != null && email != null && !email.isEmpty()) {
+    private void preFillAggregatorEmail(String email) {
+        if (aggregatorEmailInput != null && email != null && !email.isEmpty()) {
             // Set flag to prevent triggering search when setting text programmatically
             isSettingTextProgrammatically = true;
-            supervisedEmailInput.setText(email);
-            supervisedEmailInput.setSelection(email.length());
+            aggregatorEmailInput.setText(email);
+            aggregatorEmailInput.setSelection(email.length());
             isSettingTextProgrammatically = false;
-            supervisedEmailLayout.setError(null);
-            Log.d(TAG, "Pre-filled supervised email field with: " + email);
+            aggregatorEmailLayout.setError(null);
+            Log.d(TAG, "Pre-filled aggregator email field with: " + email);
         }
     }
 
@@ -548,47 +548,47 @@ public class LoginActivity extends AppCompatActivity {
         proceedButton.setEnabled(false);
         signOutButton.setEnabled(false);
 
-        String role = (selectedId == R.id.role_supervisor) ? "supervisor" : "supervised";
-        String supervisedEmail = null;
+        String role = (selectedId == R.id.role_supervisor) ? "supervisor" : "aggregator";
+        String aggregatorEmail = null;
 
         if (selectedId == R.id.role_supervisor) {
-            supervisedEmail = supervisedEmailInput.getText() != null ? 
-                    supervisedEmailInput.getText().toString().trim() : "";
+            aggregatorEmail = aggregatorEmailInput.getText() != null ? 
+                    aggregatorEmailInput.getText().toString().trim() : "";
             
-            if (supervisedEmail.isEmpty()) {
-                supervisedEmailLayout.setError("Supervised email is required");
-                supervisedEmailLayout.requestFocus();
+            if (aggregatorEmail.isEmpty()) {
+                aggregatorEmailLayout.setError(getString(R.string.aggregator_email_required));
+                aggregatorEmailLayout.requestFocus();
                 hideLoading();
                 proceedButton.setEnabled(true);
                 signOutButton.setEnabled(true);
                 return;
             }
             
-            if (!isValidGmail(supervisedEmail)) {
-                supervisedEmailLayout.setError("Please enter a valid Gmail address");
-                supervisedEmailLayout.requestFocus();
+            if (!isValidGmail(aggregatorEmail)) {
+                aggregatorEmailLayout.setError(getString(R.string.invalid_email));
+                aggregatorEmailLayout.requestFocus();
                 hideLoading();
                 proceedButton.setEnabled(true);
                 signOutButton.setEnabled(true);
                 return;
             }
             
-            supervisedEmailLayout.setError(null);
+            aggregatorEmailLayout.setError(null);
         }
 
-        saveUserRole(currentUser, role, supervisedEmail);
+        saveUserRole(currentUser, role, aggregatorEmail);
     }
 
-    private void saveUserRole(FirebaseUser user, String role, String supervisedEmail) {
+    private void saveUserRole(FirebaseUser user, String role, String aggregatorEmail) {
         Log.d(TAG, "Saving role '" + role + "' for user: " + user.getUid() + 
-               (supervisedEmail != null ? ", supervised email: " + supervisedEmail : ""));
+               (aggregatorEmail != null ? ", aggregator email: " + aggregatorEmail : ""));
 
         Map<String, Object> updates = new HashMap<>();
         updates.put("role", role);
         updates.put("lastSelectedRole", role); // Save for future pre-filling
         updates.put("lastSignIn", System.currentTimeMillis());
-        if (supervisedEmail != null && !supervisedEmail.isEmpty()) {
-            updates.put("supervisedEmail", supervisedEmail);
+        if (aggregatorEmail != null && !aggregatorEmail.isEmpty()) {
+            updates.put("aggregatorEmail", aggregatorEmail);
         }
 
         db.collection("users").document(user.getUid())
@@ -689,16 +689,16 @@ public class LoginActivity extends AppCompatActivity {
         }
     }
 
-    private void searchSupervisedUsers(String query) {
+    private void searchAggregatorUsers(String query) {
         if (query.trim().isEmpty() || query.length() < 2) {
             return;
         }
 
-        Log.d(TAG, "Searching for supervised users matching: '" + query + "'");
+        Log.d(TAG, "Searching for aggregator users matching: '" + query + "'");
         
-        // Search for users with role 'supervised' and email containing the query
+        // Search for users with role 'aggregator' and email containing the query
         db.collection("users")
-                .whereEqualTo("role", "supervised")
+                .whereEqualTo("role", "aggregator")
                 .get()
                 .addOnSuccessListener(queryDocumentSnapshots -> {
                     List<String> matchingEmails = new ArrayList<>();
@@ -708,43 +708,43 @@ public class LoginActivity extends AppCompatActivity {
                         String email = document.getString("email");
                         if (email != null && email.toLowerCase().contains(lowerQuery)) {
                             matchingEmails.add(email);
-                            Log.d(TAG, "Found matching supervised user: " + email);
+                            Log.d(TAG, "Found matching aggregator user: " + email);
                         }
                     });
                     
-                    Log.d(TAG, "Search completed: " + matchingEmails.size() + " supervised users found matching '" + query + "'");
+                    Log.d(TAG, "Search completed: " + matchingEmails.size() + " aggregator users found matching '" + query + "'");
                     
                     runOnUiThread(() -> {
-                        supervisedEmails.clear();
-                        supervisedEmails.addAll(matchingEmails);
+                        aggregatorEmails.clear();
+                        aggregatorEmails.addAll(matchingEmails);
                         emailAdapter.notifyDataSetChanged();
                         
-                        if (!matchingEmails.isEmpty() && supervisedEmailInput.hasFocus()) {
+                        if (!matchingEmails.isEmpty() && aggregatorEmailInput.hasFocus()) {
                             Log.d(TAG, "Showing popup with " + matchingEmails.size() + " suggestions");
                             showSuggestionPopup();
                         } else if (matchingEmails.isEmpty()) {
-                            Log.d(TAG, "No supervised users found matching '" + query + "' - user can enter manually");
+                            Log.d(TAG, "No aggregator users found matching '" + query + "' - user can enter manually");
                             hideSuggestionPopup();
                         }
                     });
                 })
                 .addOnFailureListener(e -> {
-                    Log.w(TAG, "Error searching supervised users: " + e.getMessage(), e);
+                    Log.w(TAG, "Error searching aggregator users: " + e.getMessage(), e);
                     // Don't show error to user, just continue with manual entry
                     // This allows the flow to continue even if database is unavailable
                 });
     }
 
     private void showSuggestionPopup() {
-        if (suggestionPopup != null && !suggestionPopup.isShowing() && supervisedEmailInput != null) {
+        if (suggestionPopup != null && !suggestionPopup.isShowing() && aggregatorEmailInput != null) {
             try {
                 // Calculate popup width to match the TextInputLayout
-                int width = supervisedEmailLayout != null ? supervisedEmailLayout.getWidth() : supervisedEmailInput.getWidth();
+                int width = aggregatorEmailLayout != null ? aggregatorEmailLayout.getWidth() : aggregatorEmailInput.getWidth();
                 suggestionPopup.setWidth(width);
                 
                 // Show popup below the input field
-                suggestionPopup.showAsDropDown(supervisedEmailInput, 0, 0);
-                Log.d(TAG, "Suggestion popup shown with " + supervisedEmails.size() + " items");
+                suggestionPopup.showAsDropDown(aggregatorEmailInput, 0, 0);
+                Log.d(TAG, "Suggestion popup shown with " + aggregatorEmails.size() + " items");
             } catch (Exception e) {
                 Log.w(TAG, "Error showing suggestion popup", e);
             }

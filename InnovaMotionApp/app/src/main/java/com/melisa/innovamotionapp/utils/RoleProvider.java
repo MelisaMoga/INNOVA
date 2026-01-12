@@ -22,8 +22,7 @@ public final class RoleProvider {
     public static Role getCurrentRole() {
         // Get role from GlobalData (should be cached after login)
         String role = GlobalData.getInstance().currentUserRole;
-        // Support both "aggregator" and legacy "supervised" role strings
-        if ("aggregator".equalsIgnoreCase(role) || "supervised".equalsIgnoreCase(role)) {
+        if ("aggregator".equalsIgnoreCase(role)) {
             return Role.AGGREGATOR;
         }
         if ("supervisor".equalsIgnoreCase(role)) {

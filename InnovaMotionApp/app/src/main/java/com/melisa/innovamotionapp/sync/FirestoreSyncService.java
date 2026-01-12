@@ -41,8 +41,8 @@ import java.util.concurrent.TimeUnit;
 /**
  * Service responsible for role-aware synchronization between local Room database and Firestore.
  * 
- * For supervised users: Uploads local messages to Firestore
- * For supervisor users: Downloads messages from supervised users to local Room
+ * For aggregator users: Uploads local messages to Firestore
+ * For supervisor users: Downloads messages from aggregators to local Room
  */
 public class FirestoreSyncService {
     private static final String TAG = "FirestoreSyncService";
@@ -183,7 +183,7 @@ public class FirestoreSyncService {
     }
 
     /**
-     * Sync a new message immediately if user is supervised and online
+     * Sync a new message immediately if user is aggregator and online
      * NOTE: This method does NOT insert into Room - it only syncs to Firestore
      */
     public void syncNewMessage(ReceivedBtDataEntity entity, SyncCallback callback) {
@@ -199,8 +199,8 @@ public class FirestoreSyncService {
         }
 
         if (!userSession.isAggregator()) {
-            Log.d(TAG, "User is not supervised, skipping Firestore sync");
-            callback.onSuccess("User is not supervised, no sync needed");
+            Log.d(TAG, "User is not aggregator, skipping Firestore sync");
+            callback.onSuccess("User is not aggregator, no sync needed");
             return;
         }
 
@@ -497,7 +497,7 @@ public class FirestoreSyncService {
         }
 
         if (!userSession.isLoaded() || !userSession.isAggregator()) {
-            callback.onError("User is not supervised or session not loaded");
+            callback.onError("User is not aggregator or session not loaded");
             return;
         }
 
@@ -799,7 +799,7 @@ public class FirestoreSyncService {
     }
 
     /**
-     * Backfill local Room database from Firestore for supervised users
+     * Backfill local Room database from Firestore for aggregator users
      * This method fetches historical data from Firestore and materializes it into Room
      * Used after app reinstall/clear data or first sign-in to restore local data
      */
@@ -818,8 +818,8 @@ public class FirestoreSyncService {
         }
 
         if (!userSession.isAggregator()) {
-            Log.d(TAG, "User is not supervised, skipping backfill");
-            callback.onSuccess("User is not supervised, no backfill needed");
+            Log.d(TAG, "User is not aggregator, skipping backfill");
+            callback.onSuccess("User is not aggregator, no backfill needed");
             return;
         }
 

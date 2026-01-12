@@ -204,13 +204,13 @@ public class DeviceCommunicationService extends Service {
                         return;
                     }
 
-                    // App policy: user is signed in; Firebase caches UID offline. Fetch UID when supervised.
+                    // App policy: user is signed in; Firebase caches UID offline. Fetch UID when aggregator.
                     String ownerUid = null;
                     if (userSession.isLoaded() && userSession.isAggregator()) {
                         ownerUid = firestoreSyncService.getCurrentUserId(); // cached UID even offline
                     }
                     
-                    // If not supervised/signed-in, we can't store data (need owner)
+                    // If not aggregator/signed-in, we can't store data (need owner)
                     if (ownerUid == null) {
                         Log.w(TAG, "[Service] Ignoring packet - no authenticated user");
                         return;
@@ -238,7 +238,7 @@ public class DeviceCommunicationService extends Service {
                         Posture posture = PostureFactory.createPosture(reading.getHexCode());
                         GlobalData.getInstance().setReceivedPosture(posture);
 
-                        // Notify fall locally (supervised device)
+                        // Notify fall locally (aggregator device)
                         if (posture instanceof com.melisa.innovamotionapp.data.posture.types.FallingPosture) {
                             // Get display name asynchronously and show notification
                             final String sensorId = reading.getSensorId();
