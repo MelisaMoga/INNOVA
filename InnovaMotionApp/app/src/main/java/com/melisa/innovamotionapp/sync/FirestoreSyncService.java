@@ -23,6 +23,7 @@ import com.melisa.innovamotionapp.data.database.InnovaDatabase;
 import com.melisa.innovamotionapp.data.database.ReceivedBtDataDao;
 import com.melisa.innovamotionapp.data.database.ReceivedBtDataEntity;
 import com.melisa.innovamotionapp.data.posture.Posture;
+import com.melisa.innovamotionapp.utils.Constants;
 
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -46,11 +47,11 @@ import java.util.concurrent.TimeUnit;
  */
 public class FirestoreSyncService {
     private static final String TAG = "FirestoreSyncService";
-    private static final String COLLECTION_BT_DATA = "bluetooth_messages";
-    private static final int BATCH_SIZE = 500; // Firestore batch write limit
+    private static final String COLLECTION_BT_DATA = Constants.FIRESTORE_COLLECTION_BT_DATA;
+    private static final int BATCH_SIZE = Constants.FIRESTORE_BATCH_LIMIT;
     private static final int SUPERVISOR_SYNC_INTERVAL_SECONDS = 10; // Polling interval for supervisor
     private static final int MAX_OFFLINE_QUEUE_SIZE = 100; // Max packets to queue when offline
-    private static final int MAX_RETRY_ATTEMPTS = 3; // Max retry attempts for failed batch syncs
+    private static final int MAX_RETRY_ATTEMPTS = Constants.OFFLINE_QUEUE_MAX_RETRIES;
     
     private final Context context;
     private final FirebaseFirestore firestore;
@@ -682,8 +683,8 @@ public class FirestoreSyncService {
     }
 
     // ========== SENSOR-BASED QUERY OPTIMIZATION ==========
-    // Firestore whereIn limit is 10 values per query
-    private static final int WHEREIN_LIMIT = 10;
+    // Use centralized constant for Firestore whereIn limit
+    private static final int WHEREIN_LIMIT = Constants.FIRESTORE_WHERE_IN_LIMIT;
 
     /**
      * Sync data from all supervised sensors using efficient compound queries.
@@ -966,7 +967,7 @@ public class FirestoreSyncService {
     private void fetchPagedBackfillData(String userId, long localMaxTimestamp, 
                                        DocumentSnapshot lastDoc, int totalProcessed, 
                                        SyncCallback callback) {
-        final int PAGE_SIZE = 500;
+        final int PAGE_SIZE = Constants.FIRESTORE_PAGE_SIZE;
         
         Query query = firestore.collection(COLLECTION_BT_DATA)
                 .whereEqualTo("userId", userId)
@@ -1523,7 +1524,7 @@ public class FirestoreSyncService {
         List<ReceivedBtDataEntity> entitiesToInsert = new ArrayList<>();
         long now = System.currentTimeMillis();
 
-        final long RECENT_MS = 60_000 * 60 * 24; // alert only if within 24 hours
+        final long RECENT_MS = Constants.FALL_ALERT_RECENT_WINDOW_MS;
 
         for (DocumentChange change : documentChanges) {
             if (change.getType() == DocumentChange.Type.ADDED || change.getType() == DocumentChange.Type.MODIFIED) {
@@ -1602,7 +1603,7 @@ public class FirestoreSyncService {
         List<ReceivedBtDataEntity> entitiesToInsert = new ArrayList<>();
         long now = System.currentTimeMillis();
 
-        final long RECENT_MS = 60_000 * 1 * 60 * 24; // alert only if within 24 hours
+        final long RECENT_MS = Constants.FALL_ALERT_RECENT_WINDOW_MS;
 
         for (DocumentChange change : documentChanges) {
             if (change.getType() == DocumentChange.Type.ADDED || change.getType() == DocumentChange.Type.MODIFIED) {

@@ -174,11 +174,11 @@ public class PacketParser {
      * Truncate a string for safe logging (prevents log pollution from very long lines).
      */
     private String truncateForLog(String s) {
-        final int MAX_LOG_LENGTH = 50;
-        if (s.length() <= MAX_LOG_LENGTH) {
+        final int maxLength = Constants.LOG_TRUNCATE_LENGTH;
+        if (s.length() <= maxLength) {
             return s;
         }
-        return s.substring(0, MAX_LOG_LENGTH) + "... (" + s.length() + " chars)";
+        return s.substring(0, maxLength) + "... (" + s.length() + " chars)";
     }
     
     /**

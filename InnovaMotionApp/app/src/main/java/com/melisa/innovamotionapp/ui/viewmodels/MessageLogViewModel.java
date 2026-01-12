@@ -13,6 +13,7 @@ import com.melisa.innovamotionapp.data.database.InnovaDatabase;
 import com.melisa.innovamotionapp.data.database.ReceivedBtDataDao;
 import com.melisa.innovamotionapp.data.database.ReceivedBtDataEntity;
 import com.melisa.innovamotionapp.ui.models.MessageLogItem;
+import com.melisa.innovamotionapp.utils.Constants;
 import com.melisa.innovamotionapp.utils.PersonNameManager;
 
 import java.util.ArrayList;
@@ -28,7 +29,7 @@ import java.util.Map;
  */
 public class MessageLogViewModel extends AndroidViewModel {
 
-    private static final int DEFAULT_MESSAGE_LIMIT = 500;
+    private static final int DEFAULT_MESSAGE_LIMIT = Constants.MESSAGE_LOG_MAX_ITEMS;
     
     // Posture hex codes (lowercase for comparison)
     private static final String HEX_STANDING = "0xab3311";
