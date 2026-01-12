@@ -54,6 +54,10 @@
             android:exported="false"
             android:label="@string/app_name" />
         <activity
+            android:name=".activities.PersonNamesActivity"
+            android:exported="false"
+            android:parentActivityName=".activities.AggregatorDashboardActivity" />
+        <activity
             android:name=".activities.EnergyConsumptionActivity"/>
         <activity
             android:name=".activities.TimeLapseActivity"/>

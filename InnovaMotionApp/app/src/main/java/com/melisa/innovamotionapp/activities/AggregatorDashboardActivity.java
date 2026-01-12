@@ -1,7 +1,11 @@
 package com.melisa.innovamotionapp.activities;
 
+import android.content.Intent;
 import android.os.Bundle;
+import android.view.Menu;
+import android.view.MenuItem;
 
+import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
 import com.google.android.material.tabs.TabLayoutMediator;
@@ -63,6 +67,21 @@ public class AggregatorDashboardActivity extends BaseActivity {
     protected void onBaseResume() {
         super.onBaseResume();
         Logger.d(TAG, "AggregatorDashboardActivity resumed");
+    }
+
+    @Override
+    public boolean onCreateOptionsMenu(Menu menu) {
+        getMenuInflater().inflate(R.menu.aggregator_dashboard_menu, menu);
+        return true;
+    }
+
+    @Override
+    public boolean onOptionsItemSelected(@NonNull MenuItem item) {
+        if (item.getItemId() == R.id.action_manage_names) {
+            startActivity(new Intent(this, PersonNamesActivity.class));
+            return true;
+        }
+        return super.onOptionsItemSelected(item);
     }
 
     @Override
