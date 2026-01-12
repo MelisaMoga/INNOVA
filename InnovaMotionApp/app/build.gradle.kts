@@ -30,6 +30,12 @@ android {
     buildFeatures {
         viewBinding = true
     }
+    
+    // Allow Android framework classes to return default values in unit tests
+    // This prevents RuntimeException for Log.d(), etc.
+    testOptions {
+        unitTests.isReturnDefaultValues = true
+    }
 }
 
 dependencies {
