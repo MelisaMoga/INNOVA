@@ -29,8 +29,10 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Queue;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.Set;
+import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
@@ -47,6 +49,8 @@ public class FirestoreSyncService {
     private static final String COLLECTION_BT_DATA = "bluetooth_messages";
     private static final int BATCH_SIZE = 500; // Firestore batch write limit
     private static final int SUPERVISOR_SYNC_INTERVAL_SECONDS = 10; // Polling interval for supervisor
+    private static final int MAX_OFFLINE_QUEUE_SIZE = 100; // Max packets to queue when offline
+    private static final int MAX_RETRY_ATTEMPTS = 3; // Max retry attempts for failed batch syncs
     
     private final Context context;
     private final FirebaseFirestore firestore;
@@ -62,6 +66,22 @@ public class FirestoreSyncService {
     private final Map<String, ListenerRegistration> mirrorByUid = new HashMap<>();
     private final Set<String> startingUids = new HashSet<>();
     private boolean isSupervisorSyncActive = false;
+    
+    // Offline queue for batch sync when connectivity is lost
+    private final Queue<QueuedPacket> offlineQueue = new ConcurrentLinkedQueue<>();
+    
+    /**
+     * Wrapper class for queued packets with retry count tracking
+     */
+    private static class QueuedPacket {
+        final List<ReceivedBtDataEntity> entities;
+        int retryCount;
+        
+        QueuedPacket(List<ReceivedBtDataEntity> entities) {
+            this.entities = new ArrayList<>(entities); // Defensive copy
+            this.retryCount = 0;
+        }
+    }
     
     // Callbacks for sync operations
     public interface SyncCallback {
@@ -130,22 +150,27 @@ public class FirestoreSyncService {
             return;
         }
 
-        if (userSession.isSupervised()) {
-            Log.i(TAG, "Supervised user: syncing local data to Firestore");
+        if (userSession.isAggregator()) {
+            Log.i(TAG, "Aggregator user: syncing local data to Firestore");
+            
+            // First, process any queued packets from when we were offline
+            processOfflineQueue();
+            
+            // Then sync any local data that hasn't been synced yet
             syncLocalDataToFirestore(new SyncCallback() {
                 @Override
                 public void onSuccess(String message) {
-                    Log.i(TAG, "Supervised user sync completed: " + message);
+                    Log.i(TAG, "Aggregator user sync completed: " + message);
                 }
 
                 @Override
                 public void onError(String error) {
-                    Log.w(TAG, "Supervised user sync failed: " + error);
+                    Log.w(TAG, "Aggregator user sync failed: " + error);
                 }
 
                 @Override
                 public void onProgress(int current, int total) {
-                    Log.d(TAG, "Supervised user sync progress: " + current + "/" + total);
+                    Log.d(TAG, "Aggregator user sync progress: " + current + "/" + total);
                 }
             });
         } else if (userSession.isSupervisor()) {
@@ -173,7 +198,7 @@ public class FirestoreSyncService {
             return;
         }
 
-        if (!userSession.isSupervised()) {
+        if (!userSession.isAggregator()) {
             Log.d(TAG, "User is not supervised, skipping Firestore sync");
             callback.onSuccess("User is not supervised, no sync needed");
             return;
@@ -223,8 +248,247 @@ public class FirestoreSyncService {
                 });
     }
 
+    // ========== BATCH SYNC METHODS ==========
+
     /**
-     * Sync all local data that hasn't been synced to Firestore yet (supervised users only)
+     * Sync an entire packet as a batch write.
+     * More efficient than individual writes - single network round-trip per packet.
+     * 
+     * If offline, the packet is queued and will be synced when connectivity is restored.
+     * 
+     * @param packet List of entities representing one packet from hardware
+     * @param callback Callback for sync result
+     */
+    public void syncPacketBatch(List<ReceivedBtDataEntity> packet, SyncCallback callback) {
+        if (packet == null || packet.isEmpty()) {
+            callback.onSuccess("Empty packet, nothing to sync");
+            return;
+        }
+
+        if (!isUserAuthenticated()) {
+            callback.onError("User not authenticated");
+            return;
+        }
+
+        if (!userSession.isLoaded()) {
+            Log.w(TAG, "User session not loaded, queueing packet for later");
+            queuePacketForLaterSync(packet);
+            callback.onSuccess("Session not loaded, queued for later sync");
+            return;
+        }
+
+        if (!userSession.isAggregator()) {
+            Log.d(TAG, "User is not aggregator, skipping Firestore sync");
+            callback.onSuccess("User is not aggregator, no sync needed");
+            return;
+        }
+
+        if (!connectivityMonitor.isConnected()) {
+            Log.d(TAG, "No connectivity, queueing packet for later sync");
+            queuePacketForLaterSync(packet);
+            callback.onSuccess("Offline, queued for later sync. Queue size: " + offlineQueue.size());
+            return;
+        }
+
+        executorService.execute(() -> {
+            syncPacketBatchInternal(packet, callback);
+        });
+    }
+
+    /**
+     * Internal method to sync a packet batch to Firestore.
+     * Handles WriteBatch 500-doc limit by splitting large packets.
+     */
+    private void syncPacketBatchInternal(List<ReceivedBtDataEntity> packet, SyncCallback callback) {
+        FirebaseUser user = auth.getCurrentUser();
+        if (user == null) {
+            callback.onError("User not authenticated (offline token unavailable); kept locally");
+            return;
+        }
+
+        String userId = user.getUid();
+
+        // If packet is larger than batch limit, split it
+        if (packet.size() > BATCH_SIZE) {
+            Log.i(TAG, "Large packet (" + packet.size() + " docs), splitting into batches");
+            syncLargePacketInBatches(userId, packet, callback);
+            return;
+        }
+
+        // Single batch write for normal-sized packets
+        WriteBatch batch = firestore.batch();
+
+        for (ReceivedBtDataEntity entity : packet) {
+            FirestoreDataModel firestoreModel = new FirestoreDataModel(
+                entity.getDeviceAddress(),
+                entity.getTimestamp(),
+                entity.getReceivedMsg(),
+                userId,
+                entity.getSensorId()
+            );
+
+            String documentId = firestoreModel.getDocumentId();
+            batch.set(
+                firestore.collection(COLLECTION_BT_DATA).document(documentId),
+                firestoreModel.toFirestoreDocument()
+            );
+        }
+
+        batch.commit()
+            .addOnSuccessListener(aVoid -> {
+                Log.d(TAG, "Batch synced successfully: " + packet.size() + " documents");
+                callback.onSuccess("Batch synced: " + packet.size() + " documents");
+            })
+            .addOnFailureListener(e -> {
+                Log.e(TAG, "Failed to sync batch to Firestore", e);
+                callback.onError("Failed to sync batch: " + e.getMessage());
+            });
+    }
+
+    /**
+     * Split a large packet into multiple batches and sync them.
+     */
+    private void syncLargePacketInBatches(String userId, List<ReceivedBtDataEntity> packet, SyncCallback callback) {
+        int totalBatches = (int) Math.ceil((double) packet.size() / BATCH_SIZE);
+        AtomicInteger completedBatches = new AtomicInteger(0);
+        AtomicInteger failedBatches = new AtomicInteger(0);
+
+        for (int i = 0; i < packet.size(); i += BATCH_SIZE) {
+            int endIndex = Math.min(i + BATCH_SIZE, packet.size());
+            List<ReceivedBtDataEntity> batchSlice = packet.subList(i, endIndex);
+
+            WriteBatch batch = firestore.batch();
+
+            for (ReceivedBtDataEntity entity : batchSlice) {
+                FirestoreDataModel firestoreModel = new FirestoreDataModel(
+                    entity.getDeviceAddress(),
+                    entity.getTimestamp(),
+                    entity.getReceivedMsg(),
+                    userId,
+                    entity.getSensorId()
+                );
+
+                String documentId = firestoreModel.getDocumentId();
+                batch.set(
+                    firestore.collection(COLLECTION_BT_DATA).document(documentId),
+                    firestoreModel.toFirestoreDocument()
+                );
+            }
+
+            final int batchNumber = (i / BATCH_SIZE) + 1;
+            batch.commit()
+                .addOnSuccessListener(aVoid -> {
+                    int completed = completedBatches.incrementAndGet();
+                    Log.d(TAG, "Batch " + batchNumber + "/" + totalBatches + " synced");
+                    callback.onProgress(completed, totalBatches);
+
+                    if (completed + failedBatches.get() == totalBatches) {
+                        if (failedBatches.get() == 0) {
+                            callback.onSuccess("All " + packet.size() + " documents synced in " + totalBatches + " batches");
+                        } else {
+                            callback.onError("Synced with errors: " + failedBatches.get() + "/" + totalBatches + " batches failed");
+                        }
+                    }
+                })
+                .addOnFailureListener(e -> {
+                    int failed = failedBatches.incrementAndGet();
+                    Log.e(TAG, "Batch " + batchNumber + "/" + totalBatches + " failed", e);
+
+                    if (completedBatches.get() + failed == totalBatches) {
+                        callback.onError("Synced with errors: " + failed + "/" + totalBatches + " batches failed");
+                    }
+                });
+        }
+    }
+
+    // ========== OFFLINE QUEUE MANAGEMENT ==========
+
+    /**
+     * Queue a packet for later sync when connectivity is restored.
+     * Respects MAX_OFFLINE_QUEUE_SIZE to prevent memory issues.
+     */
+    private void queuePacketForLaterSync(List<ReceivedBtDataEntity> packet) {
+        if (offlineQueue.size() >= MAX_OFFLINE_QUEUE_SIZE) {
+            Log.w(TAG, "Offline queue full (" + MAX_OFFLINE_QUEUE_SIZE + "), dropping oldest packet");
+            offlineQueue.poll(); // Remove oldest packet to make room
+        }
+
+        offlineQueue.add(new QueuedPacket(packet));
+        Log.d(TAG, "Queued packet for later sync. Queue size: " + offlineQueue.size());
+    }
+
+    /**
+     * Process queued packets when connectivity is restored.
+     * Called from handleConnectivityRestored().
+     */
+    private void processOfflineQueue() {
+        if (offlineQueue.isEmpty()) {
+            Log.d(TAG, "Offline queue is empty, nothing to process");
+            return;
+        }
+
+        Log.i(TAG, "Processing offline queue: " + offlineQueue.size() + " packets");
+
+        executorService.execute(() -> {
+            while (!offlineQueue.isEmpty()) {
+                QueuedPacket queuedPacket = offlineQueue.poll();
+                if (queuedPacket == null) continue;
+
+                // Check connectivity before each packet (might lose connection mid-processing)
+                if (!connectivityMonitor.isConnected()) {
+                    Log.w(TAG, "Lost connectivity while processing queue, re-queueing remaining packets");
+                    // Re-queue this packet at the front
+                    offlineQueue.add(queuedPacket);
+                    break;
+                }
+
+                syncPacketBatchInternal(queuedPacket.entities, new SyncCallback() {
+                    @Override
+                    public void onSuccess(String message) {
+                        Log.d(TAG, "Queued packet synced: " + message);
+                    }
+
+                    @Override
+                    public void onError(String error) {
+                        Log.w(TAG, "Failed to sync queued packet: " + error);
+                        // Retry logic
+                        queuedPacket.retryCount++;
+                        if (queuedPacket.retryCount < MAX_RETRY_ATTEMPTS) {
+                            Log.d(TAG, "Re-queueing failed packet (attempt " + queuedPacket.retryCount + "/" + MAX_RETRY_ATTEMPTS + ")");
+                            offlineQueue.add(queuedPacket);
+                        } else {
+                            Log.e(TAG, "Dropping packet after " + MAX_RETRY_ATTEMPTS + " failed attempts");
+                        }
+                    }
+
+                    @Override
+                    public void onProgress(int current, int total) {
+                        // Not used for queued packets
+                    }
+                });
+            }
+
+            Log.i(TAG, "Finished processing offline queue");
+        });
+    }
+
+    /**
+     * Get the current size of the offline queue (for testing/debugging).
+     */
+    public int getOfflineQueueSize() {
+        return offlineQueue.size();
+    }
+
+    /**
+     * Clear the offline queue (for testing/debugging).
+     */
+    public void clearOfflineQueue() {
+        offlineQueue.clear();
+        Log.d(TAG, "Offline queue cleared");
+    }
+
+    /**
+     * Sync all local data that hasn't been synced to Firestore yet (aggregator users only)
      */
     public void syncLocalDataToFirestore(SyncCallback callback) {
         if (!isUserAuthenticated()) {
@@ -232,7 +496,7 @@ public class FirestoreSyncService {
             return;
         }
 
-        if (!userSession.isLoaded() || !userSession.isSupervised()) {
+        if (!userSession.isLoaded() || !userSession.isAggregator()) {
             callback.onError("User is not supervised or session not loaded");
             return;
         }
@@ -507,7 +771,7 @@ public class FirestoreSyncService {
             return;
         }
 
-        if (!userSession.isSupervised()) {
+        if (!userSession.isAggregator()) {
             Log.d(TAG, "User is not supervised, skipping backfill");
             callback.onSuccess("User is not supervised, no backfill needed");
             return;
@@ -620,7 +884,7 @@ public class FirestoreSyncService {
             return;
         }
 
-        if (!userSession.isSupervised()) {
+        if (!userSession.isAggregator()) {
             Log.d(TAG, "User is not supervised, skipping paged backfill");
             callback.onSuccess("User is not supervised, no paged backfill needed");
             return;
@@ -748,7 +1012,7 @@ public class FirestoreSyncService {
         if (userSession.isSupervisor()) {
             // For supervisors, sync from Firestore to local
             syncFirestoreDataToLocal(callback);
-        } else if (userSession.isSupervised()) {
+        } else if (userSession.isAggregator()) {
             // For supervised users, sync from local to Firestore
             syncLocalDataToFirestore(callback);
         } else {

@@ -114,7 +114,7 @@ public class UserSession {
         if ("supervisor".equals(role)) {
             loadSupervisedUserIds(document, callback);
         } else {
-            // For supervised users, no additional data needed
+            // For aggregator users, no additional data needed
             supervisedUserIds = new ArrayList<>();
             isLoaded = true;
             
@@ -194,10 +194,11 @@ public class UserSession {
     }
     
     /**
-     * Check if current user is supervised role
+     * Check if current user is aggregator role (collects data from sensors, uploads to cloud).
+     * Formerly known as "supervised" role.
      */
-    public boolean isSupervised() {
-        return "supervised".equals(role);
+    public boolean isAggregator() {
+        return "aggregator".equals(role) || "supervised".equals(role); // Support both for backward compat
     }
     
     /**

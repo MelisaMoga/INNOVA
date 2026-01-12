@@ -6,8 +6,8 @@ package com.melisa.innovamotionapp.utils;
  */
 public final class RoleProvider {
     public enum Role { 
-        SUPERVISED, 
-        SUPERVISOR, 
+        AGGREGATOR,  // Collects data from sensors, uploads to cloud (formerly "supervised")
+        SUPERVISOR,  // Monitors aggregators' data
         UNKNOWN 
     }
 
@@ -22,8 +22,9 @@ public final class RoleProvider {
     public static Role getCurrentRole() {
         // Get role from GlobalData (should be cached after login)
         String role = GlobalData.getInstance().currentUserRole;
-        if ("supervised".equalsIgnoreCase(role)) {
-            return Role.SUPERVISED;
+        // Support both "aggregator" and legacy "supervised" role strings
+        if ("aggregator".equalsIgnoreCase(role) || "supervised".equalsIgnoreCase(role)) {
+            return Role.AGGREGATOR;
         }
         if ("supervisor".equalsIgnoreCase(role)) {
             return Role.SUPERVISOR;
@@ -40,10 +41,10 @@ public final class RoleProvider {
     }
     
     /**
-     * Check if the current user is supervised
-     * @return true if user is supervised, false otherwise
+     * Check if the current user is an aggregator (formerly "supervised")
+     * @return true if user is an aggregator, false otherwise
      */
-    public static boolean isSupervised() {
-        return getCurrentRole() == Role.SUPERVISED;
+    public static boolean isAggregator() {
+        return getCurrentRole() == Role.AGGREGATOR;
     }
 }

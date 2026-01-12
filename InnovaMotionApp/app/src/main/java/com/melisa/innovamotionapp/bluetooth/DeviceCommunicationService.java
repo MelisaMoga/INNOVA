@@ -74,26 +74,24 @@ public class DeviceCommunicationService extends Service {
                     if (!currentBatch.isEmpty()) {
                         database.receivedBtDataDao().insertAll(currentBatch);
                         
-                        // Sync each message to Firestore if user is supervised and online
-                        // NOTE: syncNewMessage does NOT insert into Room (we already did that above)
-                        for (ReceivedBtDataEntity entity : currentBatch) {
-                            firestoreSyncService.syncNewMessage(entity, new FirestoreSyncService.SyncCallback() {
-                                @Override
-                                public void onSuccess(String message) {
-                                    Log.d(TAG, "Message synced: " + message);
-                                }
+                        // Sync entire batch to Firestore in a single network call (if aggregator and online)
+                        // This is more efficient than individual writes - single round-trip per batch
+                        firestoreSyncService.syncPacketBatch(currentBatch, new FirestoreSyncService.SyncCallback() {
+                            @Override
+                            public void onSuccess(String message) {
+                                Log.d(TAG, "Batch synced: " + message);
+                            }
 
-                                @Override
-                                public void onError(String error) {
-                                    Log.w(TAG, "Sync error: " + error);
-                                }
+                            @Override
+                            public void onError(String error) {
+                                Log.w(TAG, "Batch sync error: " + error);
+                            }
 
-                                @Override
-                                public void onProgress(int current, int total) {
-                                    // Not used for single message sync
-                                }
-                            });
-                        }
+                            @Override
+                            public void onProgress(int current, int total) {
+                                Log.d(TAG, "Batch sync progress: " + current + "/" + total);
+                            }
+                        });
                     }
                 } catch (InterruptedException e) {
                     Thread.currentThread().interrupt(); // Restore interrupted status
@@ -208,7 +206,7 @@ public class DeviceCommunicationService extends Service {
 
                     // App policy: user is signed in; Firebase caches UID offline. Fetch UID when supervised.
                     String ownerUid = null;
-                    if (userSession.isLoaded() && userSession.isSupervised()) {
+                    if (userSession.isLoaded() && userSession.isAggregator()) {
                         ownerUid = firestoreSyncService.getCurrentUserId(); // cached UID even offline
                     }
                     
