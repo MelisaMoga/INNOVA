@@ -134,4 +134,16 @@ public class MonitoredPerson {
         long now = System.currentTimeMillis();
         return new MonitoredPerson(sensorId, displayName, now, now);
     }
+
+    // ========== Object Methods ==========
+
+    /**
+     * Returns the display name for use in ArrayAdapter/Spinner.
+     * This is what gets shown when MonitoredPerson is used in a dropdown.
+     */
+    @NonNull
+    @Override
+    public String toString() {
+        return displayName;
+    }
 }

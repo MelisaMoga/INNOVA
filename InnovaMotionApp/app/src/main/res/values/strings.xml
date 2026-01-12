@@ -125,4 +125,12 @@
     <string name="no_messages">No messages yet</string>
     <string name="posture_icon_desc">Posture icon</string>
     <string name="live_posture_placeholder">Live Posture Viewer\n\nComing in Task 6</string>
+
+    <!-- Live Posture Viewer -->
+    <string name="select_person">Person:</string>
+    <string name="risk_level">Risk:</string>
+    <string name="last_update">Last update: %1$s</string>
+    <string name="no_data_available">No data available</string>
+    <string name="unknown_person">Unknown</string>
+    <string name="no_persons_monitored">No persons being monitored</string>
 </resources>
