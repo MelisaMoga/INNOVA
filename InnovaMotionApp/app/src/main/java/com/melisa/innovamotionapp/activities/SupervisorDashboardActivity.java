@@ -2,8 +2,11 @@ package com.melisa.innovamotionapp.activities;
 
 import android.content.Intent;
 import android.os.Bundle;
+import android.view.Menu;
+import android.view.MenuItem;
 import android.view.View;
 
+import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.lifecycle.ViewModelProvider;
 import androidx.recyclerview.widget.GridLayoutManager;
@@ -28,8 +31,8 @@ import com.melisa.innovamotionapp.utils.Logger;
  */
 public class SupervisorDashboardActivity extends BaseActivity {
 
-    public static final String EXTRA_SENSOR_ID = "sensor_id";
-    public static final String EXTRA_PERSON_NAME = "person_name";
+    public static final String EXTRA_SENSOR_ID = "extra_sensor_id";
+    public static final String EXTRA_PERSON_NAME = "extra_person_name";
 
     private ActivitySupervisorDashboardBinding binding;
     private SupervisorDashboardViewModel viewModel;
@@ -108,5 +111,21 @@ public class SupervisorDashboardActivity extends BaseActivity {
     protected void onBaseDestroy() {
         super.onBaseDestroy();
         binding = null;
+    }
+
+    @Override
+    public boolean onCreateOptionsMenu(Menu menu) {
+        getMenuInflater().inflate(R.menu.supervisor_dashboard_menu, menu);
+        return true;
+    }
+
+    @Override
+    public boolean onOptionsItemSelected(@NonNull MenuItem item) {
+        if (item.getItemId() == R.id.action_sign_out) {
+            Logger.userAction(TAG, "Sign out menu item clicked");
+            signOut();
+            return true;
+        }
+        return super.onOptionsItemSelected(item);
     }
 }

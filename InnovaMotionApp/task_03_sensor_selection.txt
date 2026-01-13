@@ -1,0 +1,22 @@
+Task: Add Sensor Selection to Aggregator Dashboard
+Priority: Medium
+Files to Create/Modify:
+- Modify: app/src/main/java/com/melisa/innovamotionapp/ui/fragments/LivePostureFragment.java
+- Modify: app/src/main/java/com/melisa/innovamotionapp/ui/adapters/AggregatorDashboardPagerAdapter.java
+
+Description:
+1. In `LivePostureFragment` (Tab 2 of Aggregator Dashboard):
+   - Add a "Sensor Selector" (Spinner/Dropdown) at the top.
+   - Populate it with all known sensor IDs (from `PersonNamesViewModel` or `PersonNameManager`).
+2. When a sensor is selected:
+   - Update the visualization to show ONLY that sensor's live data.
+   - Show the 4 navigation buttons below the visualization:
+     - "Monitorizare" (Go to BtConnectedActivity for this sensor)
+     - "Statistica" (Go to StatisticsActivity for this sensor)
+     - "Activitati" (Go to ActivitiesActivity - if exists)
+     - "Consum energetic" (Go to EnergyConsumptionActivity for this sensor)
+3. Ensure the selected sensor ID is passed to these activities via Intent Extras.
+
+Technical Details:
+- Observe `PersonNameManager` or `ReceivedBtDataDao` for list of sensors.
+- Use `LiveData` to filter the displayed posture based on selection.

@@ -16,7 +16,7 @@ import android.util.Log;
 import androidx.core.app.NotificationCompat;
 
 import com.melisa.innovamotionapp.R;
-import com.melisa.innovamotionapp.activities.MainActivity;
+import com.melisa.innovamotionapp.activities.AggregatorMenuActivity;
 import com.melisa.innovamotionapp.data.database.InnovaDatabase;
 import com.melisa.innovamotionapp.data.database.ReceivedBtDataEntity;
 import com.melisa.innovamotionapp.data.posture.Posture;
@@ -328,7 +328,7 @@ public class DeviceCommunicationService extends Service {
     }
 
     private void updateServiceNotification(String title, String text, int iconRes) {
-        Intent openIntent = new Intent(this, MainActivity.class)
+        Intent openIntent = new Intent(this, AggregatorMenuActivity.class)
                 .setAction(NotificationConfig.ACTION_OPEN_FROM_SERVICE);
 
         android.app.PendingIntent contentPI =

@@ -3,13 +3,13 @@ package com.melisa.innovamotionapp.activities;
 import android.graphics.BitmapFactory;
 import android.os.Bundle;
 import android.os.Handler;
-import android.util.Log;
 import android.widget.SeekBar;
 import android.widget.Toast;
 
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.lifecycle.ViewModelProvider;
 
+import com.melisa.innovamotionapp.R;
 import com.melisa.innovamotionapp.data.database.InnovaDatabase;
 import com.melisa.innovamotionapp.data.database.ReceivedBtDataEntity;
 import com.melisa.innovamotionapp.data.posture.Posture;
@@ -17,6 +17,7 @@ import com.melisa.innovamotionapp.data.posture.PostureFactory;
 import com.melisa.innovamotionapp.databinding.TimelapsActivityBinding;
 import com.melisa.innovamotionapp.ui.viewmodels.TimeLapseViewModel;
 import com.melisa.innovamotionapp.utils.GlobalData;
+import com.melisa.innovamotionapp.utils.Logger;
 import com.melisa.innovamotionapp.utils.TargetUserResolver;
 import com.melisa.innovamotionapp.sync.UserSession;
 
@@ -34,6 +35,8 @@ import java.util.Locale;
  * 2. Sensor-based filtering: Shows data for a specific sensor (via intent extras)
  */
 public class TimeLapseActivity extends AppCompatActivity {
+    
+    private static final String TAG = "TimeLapseActivity";
     
     // Intent extras for sensor-specific viewing
     public static final String EXTRA_SENSOR_ID = "extra_sensor_id";
@@ -86,29 +89,33 @@ public class TimeLapseActivity extends AppCompatActivity {
         sensorId = getIntent().getStringExtra(EXTRA_SENSOR_ID);
         personName = getIntent().getStringExtra(EXTRA_PERSON_NAME);
 
+        // Update title to show person name if available
+        updateTitle();
+
         // Choose filtering mode based on whether sensorId is provided
         if (sensorId != null && !sensorId.isEmpty()) {
             // Sensor-specific mode: Show data for this sensor only
-            Log.i("UI/TimeLapse", "Sensor-specific mode: sensorId=" + sensorId + ", name=" + personName);
+            Logger.i(TAG, "Sensor-specific mode: sensorId=" + sensorId + ", name=" + personName);
             viewModel.setSensorId(sensorId);
         } else {
             // User-based mode: Resolve and set target user once session is loaded
+            Logger.d(TAG, "User-based mode: resolving target user");
             if (UserSession.getInstance(getApplicationContext()).isLoaded()) {
                 String target = TargetUserResolver.resolveTargetUserId(getApplicationContext());
-                Log.i("UI/TimeLapse", "Resolved targetUserId=" + target);
+                Logger.i(TAG, "Resolved targetUserId=" + target);
                 viewModel.setTargetUserId(target);
             } else {
                 UserSession.getInstance(getApplicationContext()).loadUserSession(new UserSession.SessionLoadCallback() {
                     @Override
                     public void onSessionLoaded(String uid, String role, java.util.List<String> kids) {
                         String target = TargetUserResolver.resolveTargetUserId(getApplicationContext());
-                        Log.i("UI/TimeLapse", "Resolved targetUserId=" + target);
+                        Logger.i(TAG, "Resolved targetUserId=" + target);
                         viewModel.setTargetUserId(target);
                     }
 
                     @Override
                     public void onSessionLoadError(String error) {
-                        Log.w("UI/TimeLapse", "Session load error: " + error);
+                        Logger.w(TAG, "Session load error: " + error);
                     }
                 });
             }
@@ -120,7 +127,7 @@ public class TimeLapseActivity extends AppCompatActivity {
                 return;
             }
             int size = (list != null ? list.size() : 0);
-            Log.i("UI/TimeLapse", "listSize=" + size);
+            Logger.i(TAG, "Received data: listSize=" + size);
             if (list != null && !list.isEmpty()) {
                 // Boolean set to display data only once
                 displayedOnce = true;
@@ -262,6 +269,19 @@ public class TimeLapseActivity extends AppCompatActivity {
         // Stop the time-lapse
         handler.removeCallbacks(showImageRunnable);
         currentIndex = 0; // Reset to the first image
+    }
+
+    /**
+     * Updates the title to show the person's name when viewing sensor-specific data.
+     */
+    private void updateTitle() {
+        if (personName != null && !personName.isEmpty()) {
+            binding.textView3.setText(getString(R.string.activities_title_for_person, personName));
+            Logger.d(TAG, "Title updated for person: " + personName);
+        } else {
+            binding.textView3.setText(R.string.activities_title);
+            Logger.d(TAG, "Using default title");
+        }
     }
 
 }

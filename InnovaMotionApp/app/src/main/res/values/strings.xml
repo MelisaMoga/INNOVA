@@ -117,6 +117,12 @@
     <string name="notif_fall_title">Fall Detected: %1$s</string>
     <string name="notif_fall_text_generic">may have fallen. Check immediately.</string>
 
+    <!-- Aggregator Menu -->
+    <string name="aggregator_menu_title">Aggregator Menu</string>
+    <string name="btn_bluetooth_settings">Bluetooth Settings</string>
+    <string name="btn_dashboard">Dashboard</string>
+    <string name="dashboard_no_data_hint">No data available yet</string>
+
     <!-- Aggregator Dashboard -->
     <string name="tab_message_log">Messages</string>
     <string name="tab_live_posture">Posture</string>
@@ -134,6 +140,20 @@
     <string name="no_data_available">No data available</string>
     <string name="unknown_person">Unknown</string>
     <string name="no_persons_monitored">No persons being monitored</string>
+
+    <!-- Sensor Navigation Buttons -->
+    <string name="btn_monitorizare">Monitorizare</string>
+    <string name="btn_statistica">Statistica</string>
+    <string name="btn_activitati">Activitati</string>
+    <string name="btn_consum_energetic">Consum energetic</string>
+
+    <!-- Child Activity Titles -->
+    <string name="statistics_title">Statistica</string>
+    <string name="statistics_title_for_person">Statistica: %1$s</string>
+    <string name="activities_title">Activitati</string>
+    <string name="activities_title_for_person">Activitati: %1$s</string>
+    <string name="energy_title">Consum energetic</string>
+    <string name="energy_title_for_person">Consum energetic: %1$s</string>
 
     <!-- Person Name Management -->
     <string name="manage_person_names">Manage Names</string>

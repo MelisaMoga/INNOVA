@@ -1,10 +1,8 @@
 package com.melisa.innovamotionapp.activities;
 
-import static android.content.ContentValues.TAG;
-
 import android.bluetooth.BluetoothAdapter;
+import android.content.Intent;
 import android.os.Bundle;
-import android.util.Log;
 import android.widget.Toast;
 
 import androidx.appcompat.app.AppCompatActivity;
@@ -19,6 +17,7 @@ import com.melisa.innovamotionapp.data.posture.types.UnusedFootwearPosture;
 import com.melisa.innovamotionapp.databinding.BtConnectedActivityBinding;
 import com.melisa.innovamotionapp.ui.viewmodels.SupervisorFeedViewModel;
 import com.melisa.innovamotionapp.utils.GlobalData;
+import com.melisa.innovamotionapp.utils.Logger;
 import com.melisa.innovamotionapp.utils.RoleProvider;
 
 
@@ -30,6 +29,8 @@ import com.melisa.innovamotionapp.utils.RoleProvider;
  * 2. Sensor-specific mode: Shows data for a specific sensorId (Supervisor viewing from dashboard)
  */
 public class BtConnectedActivity extends AppCompatActivity {
+    
+    private static final String TAG = "BtConnectedActivity";
     
     // Intent extras for sensor-specific viewing
     public static final String EXTRA_SENSOR_ID = "extra_sensor_id";
@@ -53,9 +54,13 @@ public class BtConnectedActivity extends AppCompatActivity {
         binding = BtConnectedActivityBinding.inflate(getLayoutInflater());
         setContentView(binding.getRoot());
 
+        Logger.d(TAG, "BtConnectedActivity created");
+
         // Extract intent extras
         sensorId = getIntent().getStringExtra(EXTRA_SENSOR_ID);
         personName = getIntent().getStringExtra(EXTRA_PERSON_NAME);
+        
+        Logger.d(TAG, "Intent extras: sensorId=" + sensorId + ", personName=" + personName);
         
         // Set initial title/name
         if (personName != null && !personName.isEmpty()) {
@@ -66,10 +71,13 @@ public class BtConnectedActivity extends AppCompatActivity {
             binding.descriptionTextView.setText(globalData.userName);
         }
 
+        // Setup navigation buttons
+        setupNavigationButtons();
+
         // Choose observation mode based on whether sensorId is provided
         if (sensorId != null && !sensorId.isEmpty() && RoleProvider.isSupervisor()) {
             // Supervisor viewing a specific person from dashboard
-            Log.d(TAG, "Supervisor viewing specific person: sensorId=" + sensorId + ", name=" + personName);
+            Logger.d(TAG, "Supervisor viewing specific person: sensorId=" + sensorId + ", name=" + personName);
             observeSensorSpecificData();
         } else {
             // Legacy behavior: GlobalData observer for Bluetooth connection
@@ -81,9 +89,12 @@ public class BtConnectedActivity extends AppCompatActivity {
             if (!isConnected && RoleProvider.getCurrentRole() != RoleProvider.Role.SUPERVISOR) {
                 // Exit this activity only for supervised users when device connection is terminated
                 // Supervisors stay in the activity to continue monitoring Room data
+                Logger.d(TAG, "Device disconnected, finishing activity");
                 finish();
             }
         });
+        
+        Logger.i(TAG, "BtConnectedActivity initialized");
     }
 
     /**
@@ -95,7 +106,7 @@ public class BtConnectedActivity extends AppCompatActivity {
         dao.getLatestForSensor(sensorId).observe(this, entity -> {
             if (entity != null) {
                 Posture posture = PostureFactory.createPosture(entity.getReceivedMsg());
-                Log.d(TAG, "Sensor-specific: received posture for " + sensorId);
+                Logger.d(TAG, "Sensor-specific: received posture for " + sensorId);
                 displayPostureData(posture);
             }
         });
@@ -114,11 +125,11 @@ public class BtConnectedActivity extends AppCompatActivity {
 
         // New: if supervisor, observe latest message from Room so we always show the freshest posture
         if (RoleProvider.getCurrentRole() == RoleProvider.Role.SUPERVISOR) {
-            Log.d(TAG, "Supervisor detected: setting up Room-based posture feed");
+            Logger.d(TAG, "Supervisor detected: setting up Room-based posture feed");
             supervisorFeedViewModel = new ViewModelProvider(this).get(SupervisorFeedViewModel.class);
             supervisorFeedViewModel.getLatestPosture().observe(this, posture -> {
                 if (posture != null) {
-                    Log.d(TAG, "Supervisor: received latest posture from Room");
+                    Logger.d(TAG, "Supervisor: received latest posture from Room");
                     displayPostureData(posture);
                 }
             });
@@ -181,8 +192,49 @@ public class BtConnectedActivity extends AppCompatActivity {
     }
 
     public void log(String msg) {
-        Log.d(TAG, msg);
+        Logger.d(TAG, msg);
         Toast.makeText(this, msg, Toast.LENGTH_SHORT).show();
+    }
+
+    // ========== Navigation Buttons ==========
+
+    /**
+     * Set up click listeners for navigation buttons.
+     * Each button navigates to a detail activity with the current sensor context.
+     */
+    private void setupNavigationButtons() {
+        binding.btnStatistica.setOnClickListener(v -> {
+            Logger.userAction(TAG, "Statistica button clicked");
+            navigateToActivity(StatisticsActivity.class);
+        });
+
+        binding.btnActivitati.setOnClickListener(v -> {
+            Logger.userAction(TAG, "Activitati button clicked");
+            navigateToActivity(TimeLapseActivity.class);
+        });
+
+        binding.btnConsumEnergetic.setOnClickListener(v -> {
+            Logger.userAction(TAG, "Consum energetic button clicked");
+            navigateToActivity(EnergyConsumptionActivity.class);
+        });
+
+        Logger.d(TAG, "Navigation buttons configured");
+    }
+
+    /**
+     * Navigate to a detail activity with the current sensor context.
+     * Passes sensorId and personName via intent extras.
+     * 
+     * @param activityClass The target activity class
+     */
+    private void navigateToActivity(Class<?> activityClass) {
+        Logger.i(TAG, "Navigating to " + activityClass.getSimpleName() + 
+                " with sensorId=" + sensorId + ", personName=" + personName);
+        
+        Intent intent = new Intent(this, activityClass);
+        intent.putExtra(EXTRA_SENSOR_ID, sensorId);
+        intent.putExtra(EXTRA_PERSON_NAME, personName);
+        startActivity(intent);
     }
 
 }

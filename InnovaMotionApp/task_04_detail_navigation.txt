@@ -1,0 +1,18 @@
+Task: Add Navigation Buttons to Detail View (BtConnectedActivity)
+Priority: Medium
+Files to Create/Modify:
+- Modify: app/src/main/java/com/melisa/innovamotionapp/activities/BtConnectedActivity.java
+- Modify: app/src/main/res/layout/bt_connected_activity.xml
+
+Description:
+1. `BtConnectedActivity` is the "Monitorizare" view. It currently shows the video/posture.
+2. Add a bottom navigation bar or a button row with:
+   - "Statistica"
+   - "Activitati"
+   - "Consum energetic"
+   (Note: "Monitorizare" is the current screen).
+3. Handle button clicks to navigate to the respective activities (`StatisticsActivity`, `EnergyConsumptionActivity`, etc.).
+4. CRITICAL: Pass the `sensorId` and `personName` from the current activity to the target activity so they show the correct data.
+
+Technical Details:
+- Use `Intent.putExtra(EXTRA_SENSOR_ID, currentSensorId)`.

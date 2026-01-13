@@ -10,6 +10,7 @@ import androidx.lifecycle.LiveData;
 import com.melisa.innovamotionapp.data.database.InnovaDatabase;
 import com.melisa.innovamotionapp.data.database.MonitoredPerson;
 import com.melisa.innovamotionapp.data.database.MonitoredPersonDao;
+import com.melisa.innovamotionapp.sync.PersonNamesFirestoreSync;
 
 import java.util.List;
 import java.util.concurrent.ExecutorService;
@@ -29,10 +30,13 @@ public class PersonNameManager {
     private static volatile PersonNameManager instance;
     private final MonitoredPersonDao dao;
     private final ExecutorService executor;
+    private final PersonNamesFirestoreSync firestoreSync;
 
     private PersonNameManager(Context context) {
-        this.dao = InnovaDatabase.getInstance(context.getApplicationContext()).monitoredPersonDao();
+        Context appContext = context.getApplicationContext();
+        this.dao = InnovaDatabase.getInstance(appContext).monitoredPersonDao();
         this.executor = Executors.newSingleThreadExecutor();
+        this.firestoreSync = PersonNamesFirestoreSync.getInstance(appContext);
     }
 
     /**
@@ -75,18 +79,33 @@ public class PersonNameManager {
     /**
      * Set display name for a sensor ID.
      * Creates entry if it doesn't exist, updates if it does.
+     * Also syncs to Firestore for backup/restore on account switch.
      * Safe to call from any thread.
      */
     public void setDisplayName(@NonNull String sensorId, @NonNull String displayName) {
         executor.execute(() -> {
             dao.upsertByName(sensorId, displayName, System.currentTimeMillis());
             Log.d(TAG, "Set display name for " + sensorId + " -> " + displayName);
+            
+            // Also upload to Firestore for backup/restore on account switch
+            firestoreSync.uploadSingleName(sensorId, displayName, new PersonNamesFirestoreSync.SyncCallback() {
+                @Override
+                public void onSuccess(String message) {
+                    Log.d(TAG, "Name synced to Firestore: " + sensorId);
+                }
+                
+                @Override
+                public void onError(String error) {
+                    Log.w(TAG, "Failed to sync name to Firestore: " + error);
+                }
+            });
         });
     }
 
     /**
      * Ensure a sensor ID exists in the database.
      * If not, creates an entry with sensorId as the default display name.
+     * Also syncs new entries to Firestore for backup/restore on account switch.
      * Call this when a new sensor is first seen.
      * Safe to call from any thread.
      */
@@ -95,6 +114,19 @@ public class PersonNameManager {
             if (dao.sensorExists(sensorId) == 0) {
                 dao.upsertByName(sensorId, sensorId, System.currentTimeMillis());
                 Log.d(TAG, "Registered new sensor: " + sensorId);
+                
+                // Also upload to Firestore for backup/restore on account switch
+                firestoreSync.uploadSingleName(sensorId, sensorId, new PersonNamesFirestoreSync.SyncCallback() {
+                    @Override
+                    public void onSuccess(String message) {
+                        Log.d(TAG, "New sensor synced to Firestore: " + sensorId);
+                    }
+                    
+                    @Override
+                    public void onError(String error) {
+                        Log.w(TAG, "Failed to sync new sensor to Firestore: " + error);
+                    }
+                });
             }
         });
     }

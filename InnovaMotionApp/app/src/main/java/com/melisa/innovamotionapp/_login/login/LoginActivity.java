@@ -44,7 +44,8 @@ import com.google.firebase.auth.GoogleAuthProvider;
 import com.google.firebase.firestore.DocumentReference;
 import com.google.firebase.firestore.FirebaseFirestore;
 import com.melisa.innovamotionapp.R;
-import com.melisa.innovamotionapp.activities.MainActivity;
+import com.melisa.innovamotionapp.activities.AggregatorMenuActivity;
+import com.melisa.innovamotionapp.activities.SupervisorDashboardActivity;
 import com.melisa.innovamotionapp.sync.FirestoreSyncService;
 import com.melisa.innovamotionapp.sync.SessionGate;
 
@@ -409,15 +410,43 @@ public class LoginActivity extends AppCompatActivity {
                     if (document.exists()) {
                         String role = document.getString("role");
                         Log.d(TAG, "User found with role: " + (role != null ? role : "none"));
-                        // Always show role selection UI for online-only flow with pre-filling
-                        showRoleSelectionUI(user);
-                } else {
+                        
+                        // If user already has a confirmed role, skip role selection
+                        if (role != null && !role.isEmpty()) {
+                            Log.d(TAG, "User has confirmed role, navigating directly to dashboard");
+                            // Reload session and navigate
+                            SessionGate.getInstance(this).reloadSessionAndBootstrap(
+                                new SessionGate.SessionReadyCallback() {
+                                    @Override
+                                    public void onSessionReady(String userId, String confirmedRole, List<String> supervisedUserIds) {
+                                        runOnUiThread(() -> {
+                                            hideLoading();
+                                            navigateBasedOnRole(confirmedRole);
+                                        });
+                                    }
+                                    
+                                    @Override
+                                    public void onSessionError(String error) {
+                                        Log.e(TAG, "Session reload failed: " + error);
+                                        runOnUiThread(() -> {
+                                            hideLoading();
+                                            // Fallback: use role from Firestore
+                                            navigateBasedOnRole(role);
+                                        });
+                                    }
+                                }
+                            );
+                        } else {
+                            // No role yet - show role selection
+                            showRoleSelectionUI(user);
+                        }
+                    } else {
                         Log.d(TAG, "User not found in Firestore - creating profile");
                         createUserProfile(user);
-                }
+                    }
                 })
                 .addOnFailureListener(e -> {
-            Log.e(TAG, "Error checking user in Firestore", e);
+                    Log.e(TAG, "Error checking user in Firestore", e);
                     handleFirestoreError(e);
                 });
     }
@@ -603,7 +632,7 @@ public class LoginActivity extends AppCompatActivity {
                                 runOnUiThread(() -> {
                                     hideLoading();
                                     showSuccessToast("Role set successfully!");
-                                    navigateToMainActivity();
+                                    navigateBasedOnRole(confirmedRole);
                                 });
                             }
                             
@@ -613,8 +642,8 @@ public class LoginActivity extends AppCompatActivity {
                                 runOnUiThread(() -> {
                                     hideLoading();
                                     showErrorToast("Session error: " + error);
-                                    // Proceed anyway - user can try again
-                                    navigateToMainActivity();
+                                    // Proceed anyway using the role that was being saved
+                                    navigateBasedOnRole(role);
                                 });
                             }
                         }
@@ -663,9 +692,26 @@ public class LoginActivity extends AppCompatActivity {
                 });
     }
 
-    private void navigateToMainActivity() {
-        Log.d(TAG, "Navigating to MainActivity");
-        Intent intent = new Intent(this, MainActivity.class);
+    /**
+     * Navigate to the appropriate activity based on user role.
+     * Supervisors go directly to SupervisorDashboardActivity.
+     * Aggregators go directly to AggregatorMenuActivity.
+     * 
+     * @param role The confirmed user role ("supervisor" or "aggregator")
+     */
+    private void navigateBasedOnRole(String role) {
+        Log.d(TAG, "Navigating based on role: " + role);
+        Intent intent;
+        
+        if ("supervisor".equals(role)) {
+            intent = new Intent(this, SupervisorDashboardActivity.class);
+            Log.d(TAG, "Routing supervisor to SupervisorDashboardActivity");
+        } else {
+            // Aggregator (default)
+            intent = new Intent(this, AggregatorMenuActivity.class);
+            Log.d(TAG, "Routing aggregator to AggregatorMenuActivity");
+        }
+        
         intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TASK);
         startActivity(intent);
         finish();

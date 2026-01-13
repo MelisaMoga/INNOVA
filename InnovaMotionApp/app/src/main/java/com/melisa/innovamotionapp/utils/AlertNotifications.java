@@ -10,7 +10,7 @@ import androidx.annotation.NonNull;
 import androidx.core.app.NotificationCompat;
 
 import com.melisa.innovamotionapp.R;
-import com.melisa.innovamotionapp.activities.MainActivity;
+import com.melisa.innovamotionapp.activities.SupervisorDashboardActivity;
 
 /**
  * Utility class for creating and showing alert notifications.
@@ -31,7 +31,7 @@ public final class AlertNotifications {
     public static void notifyFall(@NonNull Context ctx, @NonNull String personName, String msg) {
         NotificationManager nm = (NotificationManager) ctx.getSystemService(Context.NOTIFICATION_SERVICE);
 
-        Intent openIntent = new Intent(ctx, MainActivity.class)
+        Intent openIntent = new Intent(ctx, SupervisorDashboardActivity.class)
                 .setAction(NotificationConfig.ACTION_VIEW_FALL)
                 .putExtra("from_notification", true)
                 .putExtra("fall_person_name", personName)

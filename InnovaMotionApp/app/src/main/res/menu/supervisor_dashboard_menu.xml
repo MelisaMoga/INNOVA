@@ -3,12 +3,6 @@
     xmlns:app="http://schemas.android.com/apk/res-auto">
 
     <item
-        android:id="@+id/action_manage_names"
-        android:title="@string/manage_person_names"
-        android:icon="@drawable/ic_edit"
-        app:showAsAction="ifRoom" />
-
-    <item
         android:id="@+id/action_sign_out"
         android:title="@string/sign_out"
         app:showAsAction="never" />

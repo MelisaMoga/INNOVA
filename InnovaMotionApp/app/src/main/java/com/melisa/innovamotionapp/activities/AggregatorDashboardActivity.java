@@ -79,8 +79,13 @@ public class AggregatorDashboardActivity extends BaseActivity {
 
     @Override
     public boolean onOptionsItemSelected(@NonNull MenuItem item) {
-        if (item.getItemId() == R.id.action_manage_names) {
+        int itemId = item.getItemId();
+        if (itemId == R.id.action_manage_names) {
             startActivity(new Intent(this, PersonNamesActivity.class));
+            return true;
+        } else if (itemId == R.id.action_sign_out) {
+            Logger.userAction(TAG, "Sign out menu item clicked");
+            signOut();
             return true;
         }
         return super.onOptionsItemSelected(item);

@@ -130,4 +130,76 @@
         android:layout_marginTop="8dp"
         android:layout_marginBottom="8dp" />
 
+    <!-- Navigation Buttons Container (visible when sensor selected) -->
+    <LinearLayout
+        android:id="@+id/navigationButtonsContainer"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:visibility="gone"
+        android:layout_marginTop="8dp"
+        android:padding="8dp"
+        android:background="?attr/colorSurface">
+
+        <!-- Row 1: Monitorizare and Statistica -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:gravity="center">
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/btnMonitorizare"
+                android:layout_width="0dp"
+                android:layout_weight="1"
+                android:layout_height="wrap_content"
+                android:layout_marginEnd="4dp"
+                android:text="@string/btn_monitorizare"
+                android:textSize="12sp"
+                style="@style/Theme.InnovaMotionApp.Button" />
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/btnStatistica"
+                android:layout_width="0dp"
+                android:layout_weight="1"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="4dp"
+                android:text="@string/btn_statistica"
+                android:textSize="12sp"
+                style="@style/Theme.InnovaMotionApp.Button" />
+
+        </LinearLayout>
+
+        <!-- Row 2: Activitati and Consum energetic -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:gravity="center"
+            android:layout_marginTop="8dp">
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/btnActivitati"
+                android:layout_width="0dp"
+                android:layout_weight="1"
+                android:layout_height="wrap_content"
+                android:layout_marginEnd="4dp"
+                android:text="@string/btn_activitati"
+                android:textSize="12sp"
+                style="@style/Theme.InnovaMotionApp.Button" />
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/btnConsumEnergetic"
+                android:layout_width="0dp"
+                android:layout_weight="1"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="4dp"
+                android:text="@string/btn_consum_energetic"
+                android:textSize="12sp"
+                style="@style/Theme.InnovaMotionApp.Button" />
+
+        </LinearLayout>
+
+    </LinearLayout>
+
 </LinearLayout>

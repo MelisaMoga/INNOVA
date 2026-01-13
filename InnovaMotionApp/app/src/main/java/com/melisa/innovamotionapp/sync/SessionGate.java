@@ -11,6 +11,8 @@ import com.melisa.innovamotionapp.utils.GlobalData;
 
 import java.util.List;
 
+import com.melisa.innovamotionapp.sync.PersonNamesFirestoreSync;
+
 /**
  * SessionGate manages the authentication and session loading flow.
  * Ensures all sync operations only start after user is authenticated and session is loaded.
@@ -23,6 +25,7 @@ public class SessionGate {
     private final FirebaseAuth auth;
     private final UserSession userSession;
     private final FirestoreSyncService syncService;
+    private final PersonNamesFirestoreSync personNamesSync;
     
     // Session state
     private boolean isSessionReady = false;
@@ -42,6 +45,7 @@ public class SessionGate {
         this.auth = FirebaseAuth.getInstance();
         this.userSession = UserSession.getInstance(context);
         this.syncService = FirestoreSyncService.getInstance(context);
+        this.personNamesSync = PersonNamesFirestoreSync.getInstance(context);
         
         // Set up auth state listener
         setupAuthStateListener();
@@ -226,6 +230,9 @@ public class SessionGate {
                 // #region agent log
                 android.util.Log.w("DBG_SUP", "runAggregatorPipeline: backfill success - " + message);
                 // #endregion
+                
+                // Also download person names for this aggregator
+                downloadAggregatorPersonNames();
             }
             
             @Override
@@ -234,11 +241,38 @@ public class SessionGate {
                 // #region agent log
                 android.util.Log.w("DBG_SUP", "runAggregatorPipeline: backfill error - " + error);
                 // #endregion
+                
+                // Still try to download person names even if message backfill failed
+                downloadAggregatorPersonNames();
             }
             
             @Override
             public void onProgress(int current, int total) {
                 Log.d(TAG, "Aggregator backfill progress: " + current + "/" + total);
+            }
+        });
+    }
+    
+    /**
+     * Download person names for the current aggregator from Firestore.
+     * This ensures display names are restored after account switch.
+     */
+    private void downloadAggregatorPersonNames() {
+        if (currentUserUid == null) {
+            Log.w(TAG, "Cannot download person names: currentUserUid is null");
+            return;
+        }
+        
+        Log.i(TAG, "Downloading person names for aggregator: " + currentUserUid);
+        personNamesSync.downloadNamesFromAggregator(currentUserUid, new PersonNamesFirestoreSync.SyncCallback() {
+            @Override
+            public void onSuccess(String message) {
+                Log.i(TAG, "Person names downloaded: " + message);
+            }
+            
+            @Override
+            public void onError(String error) {
+                Log.w(TAG, "Failed to download person names: " + error);
             }
         });
     }

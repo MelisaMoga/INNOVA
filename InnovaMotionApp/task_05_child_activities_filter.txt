@@ -1,0 +1,18 @@
+Task: Update Child Activities to Filter by Sensor ID
+Priority: High
+Files to Create/Modify:
+- Modify: app/src/main/java/com/melisa/innovamotionapp/activities/StatisticsActivity.java
+- Modify: app/src/main/java/com/melisa/innovamotionapp/activities/EnergyConsumptionActivity.java
+- Modify: app/src/main/java/com/melisa/innovamotionapp/activities/TimeLapseActivity.java (if used for "Activitati")
+- Modify: Data Access Objects (DAOs) and ViewModels for these activities.
+
+Description:
+1. These activities currently likely query *all* data or global data.
+2. Update `onCreate` to read `EXTRA_SENSOR_ID` from Intent.
+3. If `sensorId` is present, filter the database queries to show ONLY data for that `sensorId`.
+4. If `sensorId` is missing (legacy/fallback), deciding on behavior (show all? or show error?). Preferably show all or current user's own data (if applicable).
+5. Update the UI to show which person's data is being displayed (e.g., "Statistics for: Ion Popescu").
+
+Technical Details:
+- Update Room DAOs to add `WHERE sensor_id = :sensorId` to queries.
+- Update ViewModels to accept `sensorId` as a filter parameter.

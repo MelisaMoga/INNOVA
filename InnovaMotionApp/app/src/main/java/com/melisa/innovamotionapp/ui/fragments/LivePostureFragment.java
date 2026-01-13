@@ -1,5 +1,6 @@
 package com.melisa.innovamotionapp.ui.fragments;
 
+import android.content.Intent;
 import android.os.Bundle;
 import android.view.LayoutInflater;
 import android.view.View;
@@ -13,12 +14,17 @@ import androidx.fragment.app.Fragment;
 import androidx.lifecycle.ViewModelProvider;
 
 import com.melisa.innovamotionapp.R;
+import com.melisa.innovamotionapp.activities.BtConnectedActivity;
+import com.melisa.innovamotionapp.activities.EnergyConsumptionActivity;
+import com.melisa.innovamotionapp.activities.StatisticsActivity;
+import com.melisa.innovamotionapp.activities.TimeLapseActivity;
 import com.melisa.innovamotionapp.data.database.MonitoredPerson;
 import com.melisa.innovamotionapp.data.posture.Posture;
 import com.melisa.innovamotionapp.data.posture.types.UnknownPosture;
 import com.melisa.innovamotionapp.data.posture.types.UnusedFootwearPosture;
 import com.melisa.innovamotionapp.databinding.FragmentLivePostureBinding;
 import com.melisa.innovamotionapp.ui.viewmodels.LivePostureViewModel;
+import com.melisa.innovamotionapp.utils.Logger;
 
 import java.text.SimpleDateFormat;
 import java.util.Date;
@@ -39,6 +45,8 @@ import java.util.Locale;
  */
 public class LivePostureFragment extends Fragment {
 
+    private static final String TAG = "UI/LivePosture";
+    
     private FragmentLivePostureBinding binding;
     private LivePostureViewModel viewModel;
     
@@ -58,13 +66,19 @@ public class LivePostureFragment extends Fragment {
     public void onViewCreated(@NonNull View view, @Nullable Bundle savedInstanceState) {
         super.onViewCreated(view, savedInstanceState);
 
+        Logger.d(TAG, "LivePostureFragment view created");
+        
         viewModel = new ViewModelProvider(this).get(LivePostureViewModel.class);
 
         setupPersonSelector();
+        setupNavigationButtons();
         observePosture();
         
         // Show initial state
         showNoDataState();
+        updateNavigationButtonsVisibility(false);
+        
+        Logger.i(TAG, "LivePostureFragment initialized");
     }
 
     private void setupPersonSelector() {
@@ -78,15 +92,20 @@ public class LivePostureFragment extends Fragment {
                 Object item = parent.getItemAtPosition(position);
                 if (item instanceof MonitoredPerson) {
                     MonitoredPerson selected = (MonitoredPerson) item;
+                    Logger.d(TAG, "Person selected: sensorId=" + selected.getSensorId() + 
+                            ", name=" + selected.getDisplayName());
                     viewModel.selectPerson(selected.getSensorId());
                     isFirstPosture = true; // Reset for new person
+                    updateNavigationButtonsVisibility(true);
                 }
             }
 
             @Override
             public void onNothingSelected(AdapterView<?> parent) {
+                Logger.d(TAG, "No person selected");
                 viewModel.selectPerson(null);
                 showNoDataState();
+                updateNavigationButtonsVisibility(false);
             }
         });
     }
@@ -206,6 +225,74 @@ public class LivePostureFragment extends Fragment {
         binding.riskText.setText("-");
         binding.lastUpdateText.setVisibility(View.GONE);
         binding.videoView.stopPlayback();
+        updateNavigationButtonsVisibility(false);
+    }
+
+    // ========== Navigation Buttons ==========
+
+    /**
+     * Set up click listeners for navigation buttons.
+     * Each button navigates to a detail activity with the selected sensor ID.
+     */
+    private void setupNavigationButtons() {
+        binding.btnMonitorizare.setOnClickListener(v -> {
+            Logger.userAction(TAG, "Monitorizare button clicked");
+            navigateToActivity(BtConnectedActivity.class);
+        });
+
+        binding.btnStatistica.setOnClickListener(v -> {
+            Logger.userAction(TAG, "Statistica button clicked");
+            navigateToActivity(StatisticsActivity.class);
+        });
+
+        binding.btnActivitati.setOnClickListener(v -> {
+            Logger.userAction(TAG, "Activitati button clicked");
+            navigateToActivity(TimeLapseActivity.class);
+        });
+
+        binding.btnConsumEnergetic.setOnClickListener(v -> {
+            Logger.userAction(TAG, "Consum energetic button clicked");
+            navigateToActivity(EnergyConsumptionActivity.class);
+        });
+
+        Logger.d(TAG, "Navigation buttons configured");
+    }
+
+    /**
+     * Update visibility of navigation buttons based on selection state.
+     * Buttons are only shown when a sensor is selected.
+     * 
+     * @param hasSelection true if a sensor is selected, false otherwise
+     */
+    private void updateNavigationButtonsVisibility(boolean hasSelection) {
+        if (binding == null) return;
+        
+        int visibility = hasSelection ? View.VISIBLE : View.GONE;
+        binding.navigationButtonsContainer.setVisibility(visibility);
+        Logger.d(TAG, "Navigation buttons visibility: " + (hasSelection ? "VISIBLE" : "GONE"));
+    }
+
+    /**
+     * Navigate to a detail activity with the selected sensor ID and person name.
+     * 
+     * @param activityClass The target activity class
+     */
+    private void navigateToActivity(Class<?> activityClass) {
+        String sensorId = viewModel.getSelectedSensorId();
+        String personName = viewModel.getSelectedPersonName().getValue();
+        
+        if (sensorId == null || sensorId.isEmpty()) {
+            Logger.w(TAG, "Cannot navigate: no sensor selected");
+            return;
+        }
+        
+        Logger.i(TAG, "Navigating to " + activityClass.getSimpleName() + 
+                " with sensorId=" + sensorId + ", personName=" + personName);
+        
+        Intent intent = new Intent(requireContext(), activityClass);
+        intent.putExtra(BtConnectedActivity.EXTRA_SENSOR_ID, sensorId);
+        intent.putExtra(BtConnectedActivity.EXTRA_PERSON_NAME, personName);
+        startActivity(intent);
     }
 
     /**

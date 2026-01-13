@@ -3,7 +3,6 @@ package com.melisa.innovamotionapp.utils;
 import android.content.Context;
 
 import com.melisa.innovamotionapp.data.database.InnovaDatabase;
-import com.melisa.innovamotionapp.data.database.MonitoredPerson;
 import com.melisa.innovamotionapp.data.database.MonitoredPersonDao;
 import com.melisa.innovamotionapp.data.database.ReceivedBtDataDao;
 import com.melisa.innovamotionapp.data.database.ReceivedBtDataEntity;
@@ -228,17 +227,18 @@ public class MockDataGenerator {
     
     /**
      * Create MonitoredPerson entries for name resolution testing.
+     * Uses PersonNameManager which also syncs to Firestore.
      */
     private void createPersonEntries(List<String> sensorIds) {
-        long now = System.currentTimeMillis();
+        PersonNameManager nameManager = PersonNameManager.getInstance(context);
         for (int i = 0; i < sensorIds.size(); i++) {
             String sensorId = sensorIds.get(i);
             String displayName = MOCK_NAMES[i % MOCK_NAMES.length];
             
-            MonitoredPerson person = new MonitoredPerson(sensorId, displayName, now, now);
-            personDao.insert(person); // Uses REPLACE on conflict
+            // This also syncs to Firestore for backup/restore on account switch
+            nameManager.setDisplayName(sensorId, displayName);
         }
-        Logger.d(TAG, "Created " + sensorIds.size() + " person entries");
+        Logger.d(TAG, "Created " + sensorIds.size() + " person entries (synced to Firestore)");
     }
     
     /**
