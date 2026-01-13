@@ -34,6 +34,8 @@ public class AggregatorDashboardActivity extends BaseActivity {
         binding = ActivityAggregatorDashboardBinding.inflate(getLayoutInflater());
         setContentView(binding.getRoot());
         
+        setSupportActionBar(binding.toolbar);
+        
         setupViewPager();
         setupTabLayout();
         

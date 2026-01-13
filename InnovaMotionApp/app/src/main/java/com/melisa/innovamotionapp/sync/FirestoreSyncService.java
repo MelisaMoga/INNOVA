@@ -4,6 +4,7 @@ import android.content.Context;
 import android.util.Log;
 
 import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
 
 import com.google.android.gms.tasks.OnCompleteListener;
 import com.google.android.gms.tasks.OnFailureListener;
@@ -177,6 +178,10 @@ public class FirestoreSyncService {
         } else if (userSession.isSupervisor()) {
             Log.i(TAG, "Supervisor user: starting download sync");
             List<String> supervisedSensorIds = userSession.getSupervisedSensorIds();
+            // #region agent log
+            // H2: Log supervisor sync initiation
+            android.util.Log.w("DBG_H2", "Supervisor sync check: supervisedSensorIds=" + supervisedSensorIds + ", isEmpty=" + supervisedSensorIds.isEmpty());
+            // #endregion
             if (!supervisedSensorIds.isEmpty()) {
                 startSupervisorMirrors(supervisedSensorIds);
             }
@@ -695,8 +700,15 @@ public class FirestoreSyncService {
      * @param sensorIds List of sensor IDs to sync
      * @param callback Callback for sync result
      */
-    private void syncFromSupervisedSensors(List<String> sensorIds, SyncCallback callback) {
+    public void syncFromSupervisedSensors(List<String> sensorIds, SyncCallback callback) {
+        // #region agent log
+        android.util.Log.w("DBG_SUP", "syncFromSupervisedSensors: ENTRY, sensorIds=" + sensorIds);
+        // #endregion
+        
         if (sensorIds.isEmpty()) {
+            // #region agent log
+            android.util.Log.w("DBG_SUP", "syncFromSupervisedSensors: EMPTY sensorIds, returning early");
+            // #endregion
             callback.onSuccess("No sensors to sync");
             return;
         }
@@ -711,6 +723,10 @@ public class FirestoreSyncService {
         List<Task<QuerySnapshot>> tasks = new ArrayList<>();
 
         for (List<String> batch : batches) {
+            // #region agent log
+            // H3: Log the sensorIds being queried
+            android.util.Log.w("DBG_H3", "Querying Firestore whereIn: batchSensorIds=" + batch + ", collection=" + COLLECTION_BT_DATA);
+            // #endregion
             Task<QuerySnapshot> task = firestore.collection(COLLECTION_BT_DATA)
                     .whereIn("sensorId", batch)
                     .orderBy("timestamp", Query.Direction.ASCENDING)
@@ -769,15 +785,29 @@ public class FirestoreSyncService {
 
             long duration = System.currentTimeMillis() - startTime;
             Log.i(TAG, "Sensor sync completed in " + duration + "ms, " + batches.size() + " queries, " + allEntities.size() + " new entities");
+            
+            // #region agent log
+            // H3: Log Firestore query results
+            android.util.Log.w("DBG_H3", "Firestore query results: newEntitiesCount=" + allEntities.size() + ", batchCount=" + batches.size() + ", durationMs=" + duration);
+            // #endregion
 
             if (allEntities.isEmpty()) {
+                // #region agent log
+                android.util.Log.w("DBG_SUP", "syncFromSupervisedSensors: SUCCESS, no new entities (already up to date)");
+                // #endregion
                 callback.onSuccess("Local database is up to date");
             } else {
                 dao.insertAll(allEntities);
+                // #region agent log
+                android.util.Log.w("DBG_SUP", "syncFromSupervisedSensors: SUCCESS, inserted " + allEntities.size() + " entities");
+                // #endregion
                 callback.onSuccess("Added " + allEntities.size() + " missing messages to local database");
             }
         }).addOnFailureListener(e -> {
             Log.e(TAG, "Failed to sync from supervised sensors", e);
+            // #region agent log
+            android.util.Log.e("DBG_SUP", "syncFromSupervisedSensors: FAILURE - " + e.getMessage());
+            // #endregion
             callback.onError("Failed to sync from supervised sensors: " + e.getMessage());
         });
     }
@@ -850,6 +880,11 @@ public class FirestoreSyncService {
                 long localMaxTimestamp = dao.getMaxTimestampSync();
                 Log.d(TAG, "Local max timestamp: " + localMaxTimestamp);
                 
+                // #region agent log
+                // H3: Log backfill start parameters
+                android.util.Log.w("DBG_H3", "Backfill start: userId=" + userId + ", localMaxTimestamp=" + localMaxTimestamp);
+                // #endregion
+                
                 // Query Firestore for messages newer than local max timestamp
                 firestore.collection(COLLECTION_BT_DATA)
                         .whereEqualTo("userId", userId)
@@ -857,6 +892,11 @@ public class FirestoreSyncService {
                         .whereGreaterThan("timestamp", localMaxTimestamp)
                         .get()
                         .addOnSuccessListener(queryDocumentSnapshots -> {
+                            // #region agent log
+                            // H3: Log backfill query result
+                            android.util.Log.w("DBG_H3", "Backfill query result: count=" + queryDocumentSnapshots.size());
+                            // #endregion
+                            
                             List<ReceivedBtDataEntity> entitiesToInsert = new ArrayList<>();
                             
                             for (QueryDocumentSnapshot document : queryDocumentSnapshots) {
@@ -1339,15 +1379,24 @@ public class FirestoreSyncService {
      * 
      * @param sensorIds List of sensor IDs to monitor
      */
-    private void startSupervisorMirrors(List<String> sensorIds) {
+    public void startSupervisorMirrors(List<String> sensorIds) {
         Log.i(TAG, "Starting sensor mirrors for " + sensorIds.size() + " sensors");
+        // #region agent log
+        android.util.Log.w("DBG_SUP", "startSupervisorMirrors: ENTRY, sensorIds=" + sensorIds + ", count=" + sensorIds.size());
+        // #endregion
         
         if (sensorIds.size() <= WHEREIN_LIMIT) {
             // Use single compound listener for efficiency
+            // #region agent log
+            android.util.Log.w("DBG_SUP", "startSupervisorMirrors: using COMPOUND listener (<=10 sensors)");
+            // #endregion
             startCompoundSensorMirror(sensorIds);
         } else {
             // Fall back to per-sensor listeners (Firestore whereIn limit)
             Log.i(TAG, "Using per-sensor listeners (>10 sensors)");
+            // #region agent log
+            android.util.Log.w("DBG_SUP", "startSupervisorMirrors: using PER-SENSOR listeners (>10 sensors)");
+            // #endregion
             for (String sensorId : sensorIds) {
                 startSensorMirror(sensorId);
             }
@@ -1504,13 +1553,32 @@ public class FirestoreSyncService {
     }
     
     /**
-     * Clear all local data (for sign-out)
+     * Clear all local data (for sign-out).
+     * Fire-and-forget version - use clearLocalData(Runnable) if you need to wait for completion.
      */
     public void clearLocalData() {
-        Log.i(TAG, "Clearing all local data");
+        clearLocalData(null);
+    }
+    
+    /**
+     * Clear all local data with callback notification.
+     * Use this version when you need to wait for the clear operation to complete
+     * before proceeding (e.g., user switch scenarios).
+     * 
+     * @param onComplete Callback invoked on main thread after data is cleared (nullable)
+     */
+    public void clearLocalData(@Nullable Runnable onComplete) {
+        Log.i(TAG, "Clearing all local data" + (onComplete != null ? " (with callback)" : ""));
         executorService.execute(() -> {
             int deletedRows = dao.clearAllData();
-            Log.i(TAG, "Cleared " + deletedRows + " rows from local database");
+            // Also clear monitored persons to prevent stale names on user switch
+            int deletedPersons = localDatabase.monitoredPersonDao().clearAll();
+            Log.i(TAG, "Cleared " + deletedRows + " data rows and " + deletedPersons + " monitored persons");
+            
+            // Notify caller on main thread
+            if (onComplete != null) {
+                new android.os.Handler(android.os.Looper.getMainLooper()).post(onComplete);
+            }
         });
     }
     

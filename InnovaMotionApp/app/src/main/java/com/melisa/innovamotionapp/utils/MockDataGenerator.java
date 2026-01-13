@@ -144,10 +144,8 @@ public class MockDataGenerator {
                 // Generate sensor IDs
                 List<String> sensorIds = generateSensorIds(sensorCount);
                 
-                // Create person entries for name resolution scenario
-                if (scenario == TestScenario.NAME_RESOLUTION) {
-                    createPersonEntries(sensorIds);
-                }
+                // Create person entries for ALL scenarios to ensure Live Posture tab works
+                createPersonEntries(sensorIds);
                 
                 // Generate readings
                 List<ReceivedBtDataEntity> allReadings = new ArrayList<>();
@@ -189,6 +187,12 @@ public class MockDataGenerator {
                 
                 // Insert all readings into database
                 btDataDao.insertAll(allReadings);
+                
+                // #region agent log
+                // H5: Verify data was inserted into Room
+                int dbCount = btDataDao.dbgCountAll();
+                android.util.Log.w("DBG_H5", "After insertAll: insertedCount=" + allReadings.size() + ", dbCountAfter=" + dbCount + ", ownerUserId=" + ownerUserId + ", sensorIds=" + sensorIds);
+                // #endregion
                 
                 int totalReadings = allReadings.size();
                 Logger.i(TAG, "Scenario complete: " + totalReadings + " readings for " + sensorCount + " sensors");

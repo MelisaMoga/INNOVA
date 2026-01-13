@@ -231,11 +231,13 @@ public class LoginActivity extends AppCompatActivity {
         proceedButton.setOnClickListener(v -> onProceed());
         
         // Setup role selection listener
+        // Note: Supervisor no longer needs to enter aggregator email - sensors are pre-assigned in Firestore
         if (roleGroup != null) {
             roleGroup.setOnCheckedChangeListener((group, checkedId) -> {
                 if (checkedId == R.id.role_supervisor) {
-                    Log.d(TAG, "Supervisor role selected - showing email input");
-                    aggregatorEmailLayout.setVisibility(View.VISIBLE);
+                    Log.d(TAG, "Supervisor role selected - no email input needed (sensors pre-assigned)");
+                    aggregatorEmailLayout.setVisibility(View.GONE);
+                    aggregatorEmailLayout.setError(null);
                 } else if (checkedId == R.id.role_aggregator) {
                     Log.d(TAG, "Aggregator role selected - hiding email input");
                     aggregatorEmailLayout.setVisibility(View.GONE);
@@ -253,7 +255,28 @@ public class LoginActivity extends AppCompatActivity {
         FirebaseUser currentUser = mAuth.getCurrentUser();
         if (currentUser != null) {
             Log.d(TAG, "User already authenticated: " + currentUser.getEmail());
-            checkUserInFirestore(currentUser);
+            
+            // Check for user switch and clear local data if needed
+            android.content.SharedPreferences prefs = getSharedPreferences("app_prefs", MODE_PRIVATE);
+            String lastUid = prefs.getString("last_logged_in_uid", null);
+            
+            if (lastUid != null && !lastUid.equals(currentUser.getUid())) {
+                // User switch detected - must clear local data BEFORE proceeding
+                // to prevent race conditions between clear and backfill
+                Log.i(TAG, "User switched from " + lastUid + " to " + currentUser.getUid() + " - clearing local DB");
+                showLoading("Switching accounts...");
+                
+                FirestoreSyncService.getInstance(this).clearLocalData(() -> {
+                    // Callback runs on main thread after clear completes
+                    Log.i(TAG, "Local DB cleared, now proceeding with new user");
+                    prefs.edit().putString("last_logged_in_uid", currentUser.getUid()).apply();
+                    checkUserInFirestore(currentUser);
+                });
+            } else {
+                // No user switch - proceed immediately
+                prefs.edit().putString("last_logged_in_uid", currentUser.getUid()).apply();
+                checkUserInFirestore(currentUser);
+            }
         } else {
             Log.d(TAG, "No authenticated user found");
             showSignInUI();
@@ -419,12 +442,11 @@ public class LoginActivity extends AppCompatActivity {
                             hideLoading();
                             
                             // Pre-fill based on user type
-                            if ("supervisor".equals(role) && aggregatorEmail != null && !aggregatorEmail.isEmpty()) {
-                                // Pre-fill aggregator email for supervisors
-                                preFillAggregatorEmail(aggregatorEmail);
+                            // Note: Supervisors no longer need email input - sensors are pre-assigned in Firestore
+                            if ("supervisor".equals(role)) {
                                 roleSupervisor.setChecked(true);
-                                aggregatorEmailLayout.setVisibility(View.VISIBLE);
-                                Log.d(TAG, "Pre-filled aggregator email for supervisor: " + aggregatorEmail);
+                                aggregatorEmailLayout.setVisibility(View.GONE);
+                                Log.d(TAG, "Pre-filled supervisor role (sensors pre-assigned in Firestore)");
                             } else if ("aggregator".equals(role)) {
                                 // Pre-fill role selection for aggregator accounts
                                 roleAggregator.setChecked(true);
@@ -434,10 +456,7 @@ public class LoginActivity extends AppCompatActivity {
                                 // Pre-fill last selected role for users without a set role
                                 if ("supervisor".equals(lastSelectedRole)) {
                                     roleSupervisor.setChecked(true);
-                                    aggregatorEmailLayout.setVisibility(View.VISIBLE);
-                                    if (aggregatorEmail != null && !aggregatorEmail.isEmpty()) {
-                                        preFillAggregatorEmail(aggregatorEmail);
-                                    }
+                                    aggregatorEmailLayout.setVisibility(View.GONE);
                                 } else {
                                     roleAggregator.setChecked(true);
                                     aggregatorEmailLayout.setVisibility(View.GONE);
@@ -549,34 +568,10 @@ public class LoginActivity extends AppCompatActivity {
         signOutButton.setEnabled(false);
 
         String role = (selectedId == R.id.role_supervisor) ? "supervisor" : "aggregator";
-        String aggregatorEmail = null;
-
-        if (selectedId == R.id.role_supervisor) {
-            aggregatorEmail = aggregatorEmailInput.getText() != null ? 
-                    aggregatorEmailInput.getText().toString().trim() : "";
-            
-            if (aggregatorEmail.isEmpty()) {
-                aggregatorEmailLayout.setError(getString(R.string.aggregator_email_required));
-                aggregatorEmailLayout.requestFocus();
-                hideLoading();
-                proceedButton.setEnabled(true);
-                signOutButton.setEnabled(true);
-                return;
-            }
-            
-            if (!isValidGmail(aggregatorEmail)) {
-                aggregatorEmailLayout.setError(getString(R.string.invalid_email));
-                aggregatorEmailLayout.requestFocus();
-                hideLoading();
-                proceedButton.setEnabled(true);
-                signOutButton.setEnabled(true);
-                return;
-            }
-            
-            aggregatorEmailLayout.setError(null);
-        }
-
-        saveUserRole(currentUser, role, aggregatorEmail);
+        
+        // Supervisor no longer requires email input - sensors are pre-assigned in Firestore by aggregator
+        // Just save the role and proceed
+        saveUserRole(currentUser, role, null);
     }
 
     private void saveUserRole(FirebaseUser user, String role, String aggregatorEmail) {

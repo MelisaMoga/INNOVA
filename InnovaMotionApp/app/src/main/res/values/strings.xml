@@ -186,4 +186,18 @@
     <string name="syncing_to_firestore">Syncing to Firestore…</string>
     <string name="firestore_sync_complete">Synced %1$d readings to Firestore</string>
     <string name="firestore_sync_error">Firestore sync failed: %1$s</string>
+
+    <!-- Sensor Settings / Supervisor Assignment -->
+    <string name="sensor_settings_title">Sensor Settings</string>
+    <string name="supervisor_email_hint">Supervisor Email</string>
+    <string name="supervisor_assigned">Assigned to: %1$s</string>
+    <string name="supervisor_not_assigned">No supervisor assigned</string>
+    <string name="assign_supervisor">Assign Supervisor</string>
+    <string name="unassign_supervisor">Unassign</string>
+    <string name="supervisor_assignment_success">Supervisor assigned successfully</string>
+    <string name="supervisor_assignment_error">Failed to assign supervisor: %1$s</string>
+    <string name="supervisor_unassigned_success">Supervisor unassigned</string>
+    <string name="no_supervisor_found">No supervisor found with that email</string>
+    <string name="searching_supervisors">Searching supervisors…</string>
+    <string name="supervisor_label">Supervisor:</string>
 </resources>

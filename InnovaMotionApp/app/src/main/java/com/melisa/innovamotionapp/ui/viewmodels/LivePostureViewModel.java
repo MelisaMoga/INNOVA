@@ -51,6 +51,14 @@ public class LivePostureViewModel extends AndroidViewModel {
 
         // Available persons for dropdown
         availablePersons = personDao.getAllMonitoredPersons();
+        
+        // #region agent log
+        // H4: Log available persons count
+        availablePersons.observeForever(persons -> {
+            int count = persons != null ? persons.size() : 0;
+            android.util.Log.w("DBG_H4", "availablePersons LiveData update: personsCount=" + count);
+        });
+        // #endregion
 
         // Latest reading for selected sensor (reactive)
         latestReading = Transformations.switchMap(selectedSensorId, sensorId -> {

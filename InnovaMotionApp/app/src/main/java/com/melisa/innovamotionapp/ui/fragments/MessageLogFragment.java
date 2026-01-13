@@ -141,6 +141,15 @@ public class MessageLogFragment extends Fragment {
         
         // Observe message counts for summary header
         viewModel.getMessageCountsPerSensor().observe(getViewLifecycleOwner(), this::updateSummaryHeader);
+        
+        // Observe person name changes to update spinner labels
+        personNameManager.getAllPersonsLive().observe(getViewLifecycleOwner(), persons -> {
+            // Re-trigger spinner update with current sensors
+            List<String> currentSensors = viewModel.getAvailableSensors().getValue();
+            if (currentSensors != null) {
+                updateFilterSpinner(currentSensors);
+            }
+        });
     }
 
     private void updateFilterSpinner(List<String> sensors) {
@@ -150,7 +159,7 @@ public class MessageLogFragment extends Fragment {
         if (sensors != null) {
             for (String sensorId : sensors) {
                 // Get display name for sensor
-                String displayName = personNameManager.getDisplayName(sensorId);
+                String displayName = viewModel.getDisplayName(sensorId);
                 if (displayName.equals(sensorId)) {
                     sensorFilterList.add(sensorId);
                 } else {
@@ -177,7 +186,7 @@ public class MessageLogFragment extends Fragment {
             int count = entry.getValue();
             
             // Get display name
-            String displayName = personNameManager.getDisplayName(sensorId);
+            String displayName = viewModel.getDisplayName(sensorId);
             
             // Create chip-like view for each sensor
             TextView chip = new TextView(requireContext());

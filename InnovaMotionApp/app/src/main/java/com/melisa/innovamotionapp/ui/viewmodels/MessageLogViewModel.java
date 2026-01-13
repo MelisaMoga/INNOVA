@@ -5,11 +5,13 @@ import android.app.Application;
 import androidx.annotation.NonNull;
 import androidx.lifecycle.AndroidViewModel;
 import androidx.lifecycle.LiveData;
+import androidx.lifecycle.MediatorLiveData;
 import androidx.lifecycle.MutableLiveData;
 import androidx.lifecycle.Transformations;
 
 import com.melisa.innovamotionapp.R;
 import com.melisa.innovamotionapp.data.database.InnovaDatabase;
+import com.melisa.innovamotionapp.data.database.MonitoredPerson;
 import com.melisa.innovamotionapp.data.database.ReceivedBtDataDao;
 import com.melisa.innovamotionapp.data.database.ReceivedBtDataEntity;
 import com.melisa.innovamotionapp.ui.models.MessageLogItem;
@@ -17,6 +19,7 @@ import com.melisa.innovamotionapp.utils.Constants;
 import com.melisa.innovamotionapp.utils.PersonNameManager;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -44,6 +47,9 @@ public class MessageLogViewModel extends AndroidViewModel {
     // Filter state
     private final MutableLiveData<String> filterSensor = new MutableLiveData<>(null);
     
+    // In-memory name cache, updated reactively from LiveData to avoid main-thread DB access
+    private volatile Map<String, String> nameCache = Collections.emptyMap();
+    
     // Transformed data
     private final LiveData<List<MessageLogItem>> messages;
     private final LiveData<List<String>> availableSensors;
@@ -54,20 +60,60 @@ public class MessageLogViewModel extends AndroidViewModel {
         dao = InnovaDatabase.getInstance(application).receivedBtDataDao();
         personNameManager = PersonNameManager.getInstance(application);
         
+        // Observe all persons to keep nameCache updated (async, off main thread)
+        LiveData<List<MonitoredPerson>> allPersons = personNameManager.getAllPersonsLive();
+        
         // Get recent messages (limit to last 500)
         LiveData<List<ReceivedBtDataEntity>> rawMessages = dao.getRecentMessages(DEFAULT_MESSAGE_LIMIT);
         
-        // Transform to UI model with person names based on filter
-        messages = Transformations.switchMap(filterSensor, sensor -> {
-            LiveData<List<ReceivedBtDataEntity>> filtered;
-            if (sensor == null || sensor.isEmpty()) {
-                filtered = rawMessages;
-            } else {
-                filtered = dao.getMessagesForSensor(sensor, DEFAULT_MESSAGE_LIMIT);
-            }
-            
-            return Transformations.map(filtered, this::transformToMessageLogItems);
+        // #region agent log
+        // H5: Log ViewModel initialization and observe message count
+        rawMessages.observeForever(entities -> {
+            int count = entities != null ? entities.size() : 0;
+            android.util.Log.w("DBG_H5", "rawMessages LiveData update: messageCount=" + count);
         });
+        // #endregion
+
+        // Use MediatorLiveData to combine rawMessages + allPersons
+        // so that transformation only runs when we have data, and uses cached names safely
+        MediatorLiveData<List<MessageLogItem>> combinedMessages = new MediatorLiveData<>();
+        
+        // Track latest data
+        final List<ReceivedBtDataEntity>[] latestEntities = new List[]{null};
+        
+        combinedMessages.addSource(allPersons, persons -> {
+            // Update name cache from persons list (this runs on main thread but no DB access)
+            Map<String, String> newCache = new HashMap<>();
+            if (persons != null) {
+                for (MonitoredPerson p : persons) {
+                    String name = p.getDisplayName();
+                    newCache.put(p.getSensorId(), (name != null && !name.isEmpty()) ? name : p.getSensorId());
+                }
+            }
+            nameCache = newCache;
+            
+            // Re-transform if we have entities
+            if (latestEntities[0] != null) {
+                combinedMessages.setValue(transformToMessageLogItems(latestEntities[0]));
+            }
+        });
+        
+        // Wrap messages transformation with filter support
+        LiveData<List<ReceivedBtDataEntity>> filteredMessages = Transformations.switchMap(filterSensor, sensor -> {
+            if (sensor == null || sensor.isEmpty()) {
+                return rawMessages;
+            } else {
+                return dao.getMessagesForSensor(sensor, DEFAULT_MESSAGE_LIMIT);
+            }
+        });
+        
+        combinedMessages.addSource(filteredMessages, entities -> {
+            latestEntities[0] = entities;
+            // Only transform if we have attempted to load persons (cache may be empty but that's ok)
+            combinedMessages.setValue(transformToMessageLogItems(entities));
+        });
+        
+        messages = combinedMessages;
         
         // Available sensors for filter dropdown
         availableSensors = dao.getDistinctSensorIds();
@@ -87,20 +133,24 @@ public class MessageLogViewModel extends AndroidViewModel {
 
     /**
      * Transform database entities to UI items.
+     * Uses the in-memory nameCache instead of DB lookups.
      */
     private List<MessageLogItem> transformToMessageLogItems(List<ReceivedBtDataEntity> entities) {
         List<MessageLogItem> items = new ArrayList<>();
         if (entities == null) return items;
         
         for (ReceivedBtDataEntity entity : entities) {
-            String displayName = personNameManager.getDisplayName(entity.getSensorId());
+            String sensorId = entity.getSensorId();
+            // Use cached name instead of blocking DB lookup
+            String displayName = nameCache.getOrDefault(sensorId, sensorId);
+            
             int iconRes = getPostureIcon(entity.getReceivedMsg());
             boolean isFall = isFallPosture(entity.getReceivedMsg());
             
             items.add(new MessageLogItem(
                     entity.getId(),
                     entity.getTimestamp(),
-                    entity.getSensorId(),
+                    sensorId,
                     displayName,
                     entity.getReceivedMsg(),
                     iconRes,
@@ -139,6 +189,14 @@ public class MessageLogViewModel extends AndroidViewModel {
     private boolean isFallPosture(String hexCode) {
         if (hexCode == null) return false;
         return hexCode.toLowerCase().equals(HEX_FALLING);
+    }
+
+    /**
+     * Get display name for a sensor ID from the local cache.
+     * Safe to call from main thread.
+     */
+    public String getDisplayName(String sensorId) {
+        return nameCache.getOrDefault(sensorId, sensorId);
     }
 
     // ========== Public API ==========

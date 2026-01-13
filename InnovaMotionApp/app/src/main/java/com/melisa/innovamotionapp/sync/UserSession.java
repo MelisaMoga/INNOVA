@@ -152,6 +152,12 @@ public class UserSession {
         // Try to get supervisedSensorIds array first (new architecture)
         @SuppressWarnings("unchecked")
         List<String> sensorIds = (List<String>) document.get("supervisedSensorIds");
+        
+        // #region agent log
+        // H1: Log what supervisedSensorIds were found in Firestore
+        android.util.Log.w("DBG_H1", "loadSupervisedSensorIds: userId=" + currentUserId + ", role=" + role + ", sensorIdsFromFirestore=" + sensorIds + ", aggregatorUid=" + aggregatorUid);
+        // #endregion
+        
         if (sensorIds != null && !sensorIds.isEmpty()) {
             supervisedSensorIds.addAll(sensorIds);
             Log.d(TAG, "Found supervisedSensorIds: " + supervisedSensorIds);

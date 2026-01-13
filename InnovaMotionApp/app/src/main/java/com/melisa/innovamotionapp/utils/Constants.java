@@ -55,6 +55,9 @@ public final class Constants {
     /** Collection name for person names in Firestore */
     public static final String FIRESTORE_COLLECTION_PERSON_NAMES = "person_names";
     
+    /** Collection name for sensor-supervisor assignments in Firestore */
+    public static final String FIRESTORE_COLLECTION_SENSOR_ASSIGNMENTS = "sensor_assignments";
+    
     // ========== UI CONFIGURATION ==========
     
     /** Maximum messages to display in the message log */

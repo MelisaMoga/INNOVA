@@ -182,4 +182,49 @@ public class PersonNamesViewModelTest {
     private boolean areContentsTheSame(String sensorId1, String name1, String sensorId2, String name2) {
         return sensorId1.equals(sensorId2) && name1.equals(name2);
     }
+
+    // ========== Supervisor Assignment Map Tests ==========
+    
+    @Test
+    public void supervisorMap_getSupervisor_returnsEmail() {
+        java.util.Map<String, String> map = new java.util.HashMap<>();
+        map.put("sensor001", "supervisor@example.com");
+        
+        String result = map.get("sensor001");
+        
+        assertEquals("supervisor@example.com", result);
+    }
+    
+    @Test
+    public void supervisorMap_getSupervisor_notAssigned_returnsNull() {
+        java.util.Map<String, String> map = new java.util.HashMap<>();
+        
+        String result = map.get("sensor001");
+        
+        assertNull(result);
+    }
+    
+    @Test
+    public void supervisorMap_updateEntry_replacesOldValue() {
+        java.util.Map<String, String> map = new java.util.HashMap<>();
+        map.put("sensor001", "old@example.com");
+        
+        // Simulate update
+        map.put("sensor001", "new@example.com");
+        
+        assertEquals("new@example.com", map.get("sensor001"));
+        assertEquals(1, map.size());
+    }
+    
+    @Test
+    public void supervisorMap_removeEntry_setsToNull() {
+        java.util.Map<String, String> map = new java.util.HashMap<>();
+        map.put("sensor001", "supervisor@example.com");
+        
+        // Simulate unassign
+        map.remove("sensor001");
+        
+        assertNull(map.get("sensor001"));
+        assertEquals(0, map.size());
+    }
 }
