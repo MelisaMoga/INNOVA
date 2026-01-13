@@ -6,22 +6,35 @@ import android.app.TaskStackBuilder;
 import android.content.Context;
 import android.content.Intent;
 
+import androidx.annotation.NonNull;
 import androidx.core.app.NotificationCompat;
 
 import com.melisa.innovamotionapp.R;
-import com.melisa.innovamotionapp.activities.MainActivity;
+import com.melisa.innovamotionapp.activities.SupervisorDashboardActivity;
 
+/**
+ * Utility class for creating and showing alert notifications.
+ */
 public final class AlertNotifications {
     private AlertNotifications() {}
 
-    /** Fall alert (high-priority). */
-    public static void notifyFall(Context ctx, String who, String msg) {
+    /**
+     * Show a fall detection alert notification.
+     * 
+     * The notification includes the person's name in the title for easy identification
+     * in multi-user monitoring scenarios.
+     * 
+     * @param ctx         Application context
+     * @param personName  The display name of the person who fell (e.g., "Ion Popescu" or sensor ID)
+     * @param msg         Optional message body (uses default if null)
+     */
+    public static void notifyFall(@NonNull Context ctx, @NonNull String personName, String msg) {
         NotificationManager nm = (NotificationManager) ctx.getSystemService(Context.NOTIFICATION_SERVICE);
 
-        Intent openIntent = new Intent(ctx, MainActivity.class)
+        Intent openIntent = new Intent(ctx, SupervisorDashboardActivity.class)
                 .setAction(NotificationConfig.ACTION_VIEW_FALL)
                 .putExtra("from_notification", true)
-                .putExtra("fall_owner_uid", who)
+                .putExtra("fall_person_name", personName)
                 .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TOP);
 
         PendingIntent contentPI = TaskStackBuilder.create(ctx)
@@ -33,17 +46,22 @@ public final class AlertNotifications {
                                 : PendingIntent.FLAG_UPDATE_CURRENT
                 );
 
+        // Title includes person name for multi-user monitoring
+        String title = ctx.getString(R.string.notif_fall_title, personName);
+        String body = msg != null ? msg : ctx.getString(R.string.notif_fall_text_generic);
+
         NotificationCompat.Builder b = new NotificationCompat.Builder(ctx, NotificationConfig.CHANNEL_FALL_ALERTS)
                 .setSmallIcon(R.drawable.ic_launcher_foreground)
-                .setContentTitle(ctx.getString(R.string.notif_fall_title))
-                .setContentText(msg != null ? msg : ctx.getString(R.string.notif_fall_text_generic))
-                .setStyle(new NotificationCompat.BigTextStyle().bigText(
-                        msg != null ? msg : ctx.getString(R.string.notif_fall_text_generic)))
+                .setContentTitle(title)
+                .setContentText(body)
+                .setStyle(new NotificationCompat.BigTextStyle().bigText(body))
                 .setPriority(NotificationCompat.PRIORITY_HIGH)
                 .setCategory(NotificationCompat.CATEGORY_ALARM)
                 .setAutoCancel(true)
                 .setContentIntent(contentPI);
 
-        nm.notify(NotificationConfig.NOTIF_ID_FALL_BASE, b.build());
+        // Use unique notification ID per person to avoid overwriting
+        int notificationId = NotificationConfig.NOTIF_ID_FALL_BASE + personName.hashCode();
+        nm.notify(notificationId, b.build());
     }
 }

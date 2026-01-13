@@ -39,12 +39,12 @@ public class SupervisorFeedViewModel extends AndroidViewModel {
      * @return LiveData<Posture> that emits the latest posture from Room database
      */
     public LiveData<Posture> getLatestPosture() {
-        // Get supervised user IDs from GlobalData
-        List<String> supervisedUserIds = global.supervisedUserIds;
+        // Get supervised sensor IDs from GlobalData
+        List<String> supervisedSensorIds = global.supervisedSensorIds;
         
-        if (supervisedUserIds == null || supervisedUserIds.isEmpty()) {
-            // Fallback to all data if no supervised users configured
-            Log.i("UI/Stats", "Subscribing for owner=all (no supervised users configured)");
+        if (supervisedSensorIds == null || supervisedSensorIds.isEmpty()) {
+            // Fallback to all data if no supervised sensors configured
+            Log.i("UI/Stats", "Subscribing for owner=all (no supervised sensors configured)");
             LiveData<ReceivedBtDataEntity> latest = dao.getLatestMessage();
             return Transformations.map(latest, entity -> {
                 if (entity == null) {
@@ -62,9 +62,9 @@ public class SupervisorFeedViewModel extends AndroidViewModel {
             });
         }
         
-        // Filter by supervised user IDs
-        Log.i("UI/Stats", "Subscribing for owner=" + supervisedUserIds);
-        LiveData<ReceivedBtDataEntity> latest = dao.getLatestForOwners(supervisedUserIds);
+        // Filter by supervised sensor IDs
+        Log.i("UI/Stats", "Subscribing for owner=" + supervisedSensorIds);
+        LiveData<ReceivedBtDataEntity> latest = dao.getLatestForOwners(supervisedSensorIds);
         return Transformations.map(latest, entity -> {
             if (entity == null) {
                 return new UnknownPosture();

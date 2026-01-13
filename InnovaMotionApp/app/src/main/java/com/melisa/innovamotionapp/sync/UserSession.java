@@ -21,7 +21,14 @@ import java.util.concurrent.Executors;
 
 /**
  * Manages user session information including role and supervised targets.
- * Caches user role and supervised user IDs for efficient sync operations.
+ * 
+ * Architecture:
+ * - Aggregator: Collects data from sensors, uploads to Firestore with sensorId
+ * - Supervisor: Monitors specific sensors assigned by aggregator
+ * 
+ * Supervisor's Firestore document contains:
+ * - supervisedSensorIds: List of sensor IDs this supervisor can monitor
+ * - aggregatorUid: The aggregator that assigned these sensors (for reference)
  */
 public class UserSession {
     private static final String TAG = "UserSession";
@@ -35,12 +42,13 @@ public class UserSession {
     // Cached user data
     private String currentUserId;
     private String role;
-    private List<String> supervisedUserIds;
+    private List<String> supervisedSensorIds;  // Sensor IDs this supervisor can monitor
+    private String aggregatorUid;              // The aggregator that assigned sensors
     private boolean isLoaded = false;
     
     // Callback interface for session loading
     public interface SessionLoadCallback {
-        void onSessionLoaded(String userId, String role, List<String> supervisedUserIds);
+        void onSessionLoaded(String userId, String role, List<String> supervisedSensorIds);
         void onSessionLoadError(String error);
     }
     
@@ -112,92 +120,84 @@ public class UserSession {
         Log.d(TAG, "Loaded user role: " + role + " for user: " + userId);
         
         if ("supervisor".equals(role)) {
-            loadSupervisedUserIds(document, callback);
+            loadSupervisedSensorIds(document, callback);
         } else {
-            // For supervised users, no additional data needed
-            supervisedUserIds = new ArrayList<>();
+            // For aggregator users, no additional data needed
+            supervisedSensorIds = new ArrayList<>();
+            aggregatorUid = null;
             isLoaded = true;
             
             if (callback != null) {
-                callback.onSessionLoaded(userId, role, supervisedUserIds);
+                callback.onSessionLoaded(userId, role, supervisedSensorIds);
             }
         }
     }
     
     /**
-     * Load supervised user IDs for supervisor role
+     * Load supervised sensor IDs for supervisor role.
+     * 
+     * Firestore document structure:
+     * - supervisedSensorIds: ['sensor001', 'sensor002', ...]
+     * - aggregatorUid: 'uid_of_aggregator' (optional, for reference)
      */
-    private void loadSupervisedUserIds(DocumentSnapshot document, SessionLoadCallback callback) {
-        supervisedUserIds = new ArrayList<>();
+    private void loadSupervisedSensorIds(DocumentSnapshot document, SessionLoadCallback callback) {
+        supervisedSensorIds = new ArrayList<>();
         
-        // Try to get supervisedUserIds array first
+        // Load aggregator UID (for reference/ownership tracking)
+        aggregatorUid = document.getString("aggregatorUid");
+        if (aggregatorUid != null) {
+            Log.d(TAG, "Found aggregatorUid: " + aggregatorUid);
+        }
+        
+        // Try to get supervisedSensorIds array first (new architecture)
         @SuppressWarnings("unchecked")
-        List<String> userIds = (List<String>) document.get("supervisedUserIds");
-        if (userIds != null && !userIds.isEmpty()) {
-            supervisedUserIds.addAll(userIds);
-            Log.d(TAG, "Found supervisedUserIds: " + supervisedUserIds);
+        List<String> sensorIds = (List<String>) document.get("supervisedSensorIds");
+        
+        // #region agent log
+        // H1: Log what supervisedSensorIds were found in Firestore
+        android.util.Log.w("DBG_H1", "loadSupervisedSensorIds: userId=" + currentUserId + ", role=" + role + ", sensorIdsFromFirestore=" + sensorIds + ", aggregatorUid=" + aggregatorUid);
+        // #endregion
+        
+        if (sensorIds != null && !sensorIds.isEmpty()) {
+            supervisedSensorIds.addAll(sensorIds);
+            Log.d(TAG, "Found supervisedSensorIds: " + supervisedSensorIds);
             isLoaded = true;
             
             if (callback != null) {
-                callback.onSessionLoaded(currentUserId, role, supervisedUserIds);
+                callback.onSessionLoaded(currentUserId, role, supervisedSensorIds);
             }
             return;
         }
         
-        // If no supervisedUserIds array, try supervisedEmail
-        String supervisedEmail = document.getString("supervisedEmail");
-        if (supervisedEmail != null && !supervisedEmail.trim().isEmpty()) {
-            Log.d(TAG, "Found supervisedEmail, resolving to UID: " + supervisedEmail);
-            resolveEmailToUserId(supervisedEmail, callback);
-        } else {
-            Log.w(TAG, "No supervised users found for supervisor");
+        // Fallback: try legacy supervisedUserIds field (backward compatibility)
+        @SuppressWarnings("unchecked")
+        List<String> legacyUserIds = (List<String>) document.get("supervisedUserIds");
+        if (legacyUserIds != null && !legacyUserIds.isEmpty()) {
+            // In legacy mode, these were aggregator UIDs - treat them as sensor IDs for now
+            Log.w(TAG, "Using legacy supervisedUserIds field - migration recommended");
+            supervisedSensorIds.addAll(legacyUserIds);
             isLoaded = true;
             
             if (callback != null) {
-                callback.onSessionLoaded(currentUserId, role, supervisedUserIds);
+                callback.onSessionLoaded(currentUserId, role, supervisedSensorIds);
             }
+            return;
+        }
+        
+        // If no sensor IDs found, log warning
+        Log.w(TAG, "No supervised sensors found for supervisor");
+        isLoaded = true;
+        
+        if (callback != null) {
+            callback.onSessionLoaded(currentUserId, role, supervisedSensorIds);
         }
     }
     
     /**
-     * Resolve email to user ID via Firestore query
+     * Check if current user is aggregator role (collects data from sensors, uploads to cloud).
      */
-    private void resolveEmailToUserId(String email, SessionLoadCallback callback) {
-        firestore.collection("users")
-                .whereEqualTo("email", email)
-                .limit(1)
-                .get()
-                .addOnCompleteListener(new OnCompleteListener<QuerySnapshot>() {
-                    @Override
-                    public void onComplete(@NonNull Task<QuerySnapshot> task) {
-                        if (task.isSuccessful()) {
-                            QuerySnapshot querySnapshot = task.getResult();
-                            if (querySnapshot != null && !querySnapshot.isEmpty()) {
-                                for (QueryDocumentSnapshot doc : querySnapshot) {
-                                    String supervisedUserId = doc.getId();
-                                    supervisedUserIds.add(supervisedUserId);
-                                    Log.d(TAG, "Resolved email " + email + " to UID: " + supervisedUserId);
-                                }
-                            } else {
-                                Log.w(TAG, "No user found with email: " + email);
-                            }
-                        } else {
-                            Log.e(TAG, "Failed to resolve email to UID", task.getException());
-                        }
-                        
-                        isLoaded = true;
-                        if (callback != null) {
-                            callback.onSessionLoaded(currentUserId, role, supervisedUserIds);
-                        }
-                    }
-                });
-    }
-    
-    /**
-     * Check if current user is supervised role
-     */
-    public boolean isSupervised() {
-        return "supervised".equals(role);
+    public boolean isAggregator() {
+        return "aggregator".equals(role);
     }
     
     /**
@@ -222,10 +222,28 @@ public class UserSession {
     }
     
     /**
-     * Get supervised user IDs (for supervisor role)
+     * Get supervised sensor IDs (for supervisor role).
+     * These are the sensor IDs that this supervisor is allowed to monitor.
      */
+    public List<String> getSupervisedSensorIds() {
+        return supervisedSensorIds != null ? new ArrayList<>(supervisedSensorIds) : new ArrayList<>();
+    }
+    
+    /**
+     * @deprecated Use {@link #getSupervisedSensorIds()} instead.
+     * Kept for backward compatibility during migration.
+     */
+    @Deprecated
     public List<String> getSupervisedUserIds() {
-        return supervisedUserIds != null ? new ArrayList<>(supervisedUserIds) : new ArrayList<>();
+        return getSupervisedSensorIds();
+    }
+    
+    /**
+     * Get the aggregator UID that assigned sensors to this supervisor.
+     * May be null if not set in Firestore.
+     */
+    public String getAggregatorUid() {
+        return aggregatorUid;
     }
     
     /**
@@ -242,7 +260,8 @@ public class UserSession {
         isLoaded = false;
         currentUserId = null;
         role = null;
-        supervisedUserIds = null;
+        supervisedSensorIds = null;
+        aggregatorUid = null;
         loadUserSession(callback);
     }
     

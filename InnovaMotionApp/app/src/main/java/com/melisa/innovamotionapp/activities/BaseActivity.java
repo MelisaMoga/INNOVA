@@ -9,7 +9,11 @@ import androidx.annotation.Nullable;
 import androidx.appcompat.app.AppCompatActivity;
 
 import com.google.firebase.auth.FirebaseAuth;
+import com.melisa.innovamotionapp.R;
 import com.melisa.innovamotionapp._login.login.LoginActivity;
+import com.melisa.innovamotionapp.ui.dialogs.DeveloperPanelDialog;
+import com.melisa.innovamotionapp.utils.DevShakeDetector;
+import com.melisa.innovamotionapp.utils.FeatureFlags;
 import com.melisa.innovamotionapp.utils.GlobalData;
 import com.melisa.innovamotionapp.utils.Logger;
 
@@ -29,12 +33,19 @@ public abstract class BaseActivity extends AppCompatActivity {
     protected final String TAG = getClass().getSimpleName();
     protected GlobalData globalData;
     
+    // Developer mode shake detector (only active when DEV_MODE_ENABLED)
+    private DevShakeDetector shakeDetector;
+    private boolean devModeToastShown = false;
+    
     @Override
     protected void onCreate(@Nullable Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         
         // Initialize global data instance
         globalData = GlobalData.getInstance();
+        
+        // Initialize developer mode shake detector
+        initDevMode();
         
         // Log activity creation
         Logger.d(TAG, "Activity created");
@@ -54,6 +65,11 @@ public abstract class BaseActivity extends AppCompatActivity {
             checkAuthentication();
         }
         
+        // Start shake detector for dev mode
+        if (shakeDetector != null) {
+            shakeDetector.start();
+        }
+        
         onBaseResume();
     }
     
@@ -61,6 +77,12 @@ public abstract class BaseActivity extends AppCompatActivity {
     protected void onPause() {
         super.onPause();
         Logger.d(TAG, "Activity paused");
+        
+        // Stop shake detector
+        if (shakeDetector != null) {
+            shakeDetector.stop();
+        }
+        
         onBasePause();
     }
     
@@ -221,5 +243,48 @@ public abstract class BaseActivity extends AppCompatActivity {
     protected void logErrorAndNotifyUser(@NonNull String errorMessage, @NonNull String userMessage, @Nullable Throwable throwable) {
         Logger.e(TAG, errorMessage, throwable);
         showToast(userMessage);
+    }
+    
+    // ========== Developer Mode Support ==========
+    
+    /**
+     * Initialize developer mode shake detector.
+     * Only active when FeatureFlags.DEV_MODE_ENABLED is true.
+     */
+    private void initDevMode() {
+        if (!FeatureFlags.DEV_MODE_ENABLED) {
+            return;
+        }
+        
+        shakeDetector = new DevShakeDetector(this, this::onDevShakeDetected);
+    }
+    
+    /**
+     * Called when a shake gesture is detected in developer mode.
+     */
+    private void onDevShakeDetected() {
+        Logger.i(TAG, "Developer mode shake detected");
+        
+        // Show toast on first activation
+        if (!devModeToastShown) {
+            showToast(getString(R.string.dev_mode_activated));
+            devModeToastShown = true;
+        }
+        
+        showDeveloperPanel();
+    }
+    
+    /**
+     * Show the developer panel dialog.
+     * Can also be called programmatically for testing.
+     */
+    protected void showDeveloperPanel() {
+        if (!FeatureFlags.DEV_MODE_ENABLED) {
+            Logger.w(TAG, "Developer mode is disabled");
+            return;
+        }
+        
+        DeveloperPanelDialog dialog = DeveloperPanelDialog.newInstance();
+        dialog.show(getSupportFragmentManager(), "DeveloperPanel");
     }
 }

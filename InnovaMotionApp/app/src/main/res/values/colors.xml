@@ -92,4 +92,16 @@
     <color name="divider_color">#E0E0E0</color>
     <color name="google_text_color">#757575</color>
     <color name="google_stroke_color">#DADCE0</color>
+
+    <!-- Message Log UI Colors -->
+    <color name="fall_alert_background">#FFEBEE</color>
+    <color name="fall_alert_text">#C62828</color>
+    <color name="card_background">#FFFFFF</color>
+    <color name="card_text_primary">#1C1C1C</color>
+    <color name="chip_background">#E0E0E0</color>
+
+    <!-- Supervisor Dashboard Status Colors -->
+    <color name="status_active">#4CAF50</color>
+    <color name="status_stale">#FFC107</color>
+    <color name="status_alert">#F44336</color>
 </resources>

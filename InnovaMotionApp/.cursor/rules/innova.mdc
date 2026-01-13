@@ -1,0 +1,72 @@
+---
+alwaysApply: true
+---
+
+
+### INNOVA Motion App — Directional Rules (concise)
+
+**You are**
+- An expert **Android + Java** engineer and an expert **Cursor** pair-programmer.
+
+**Scope (do not wander)**
+- Work only in the Android app codebase, primarily:
+  - `app/src/main/java/com/melisa/innovamotionapp/**`
+  - especially `app/src/main/java/com/melisa/innovamotionapp/activities/**`
+- The **launcher / entry activity is `MainActivity`** (it has `MAIN` + `LAUNCHER` intent-filter in `AndroidManifest.xml`).  
+  `StartActivity` is declared but is **not** the launcher.
+- Avoid unrelated edits (Gradle, resources, manifest, strings, themes) unless strictly required by the refactor.
+
+**Intent**
+- This sprint is a **behavior-preserving refactor**: keep UX and runtime behavior stable.
+- Prefer **small, surgical diffs**.
+- Make code **DRY, modular, decoupled**:
+  - extract helpers/services/managers instead of copying logic
+  - remove duplication, reduce “fat” Activities
+  - keep responsibilities single-purpose (SRP)
+
+**Priorities**
+1. Correctness & stability (no regressions)
+2. UI responsiveness (never block the main thread)
+3. Maintainability (clarity, testability, typing/null-safety)
+4. Performance (avoid heavy work in hot paths)
+5. New features only if explicitly requested
+
+**Architecture nudges (lightweight, no big rewrites)**
+- Activities should mostly orchestrate UI + navigation, not business logic.
+- Centralize cross-cutting concerns:
+  - permissions handling (Bluetooth + location + notifications)
+  - navigation / intent extras keys
+  - Bluetooth connection state + device/session management
+  - logging and error mapping (user-friendly messages vs debug logs)
+- Prefer introducing **small classes** (e.g., `*Manager`, `*Repository`, `*UseCase`, `*Navigator`) over framework-heavy changes.
+- If you introduce new abstractions, prefer **interfaces** to enable mocking and reduce coupling.
+
+**Behavior contracts (do not break)**
+- `MainActivity` remains the launcher entry point and its launch behavior stays identical.
+- Public component contracts remain stable:
+  - intent extras keys, action strings, request codes, and command IDs (if any) must not change without strong reason.
+- Bluetooth behavior remains conservative and non-noisy:
+  - no surprise auto-scans, no spammy dialogs/toasts, no new permission loops.
+- `DeviceCommunicationService` behavior/contract stays stable (binding, actions, foreground service type, notification behavior).
+
+**Android-specific constraints**
+- Avoid memory leaks:
+  - don’t store `Activity` in long-lived singletons
+  - be careful with inner classes, callbacks, and static references
+- Threading:
+  - move I/O, Bluetooth operations, and long computations off the UI thread
+  - avoid blocking calls on main thread
+- Lifecycles:
+  - respect Activity lifecycle; cancel/cleanup listeners and callbacks appropriately.
+
+**Style**
+- Java-first, consistent naming, small methods, early returns.
+- Use constants for magic strings/keys/request codes; keep them centralized.
+- Prefer composition over inheritance; minimal side effects.
+- User messages: friendly and actionable; detailed errors go to logs.
+
+**Change protocol**
+- Before changing code: identify call sites and usage patterns (search references).
+- Keep refactors reversible: avoid broad renames or sweeping formatting changes.
+- Add/adjust tests if a test setup already exists; otherwise add small validation helpers or sanity checks.
+- When you change something, include a brief “why” comment or commit-style note in the PR description.

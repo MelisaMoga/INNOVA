@@ -61,9 +61,57 @@
         android:layout_width="0dp"
         android:layout_height="0dp"
         android:layout_marginTop="16dp"
+        android:layout_marginBottom="8dp"
         app:layout_constraintDimensionRatio="4:5"
         app:layout_constraintTop_toBottomOf="@id/riskContainer"
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintEnd_toEndOf="parent"
-        app:layout_constraintBottom_toBottomOf="parent" />
+        app:layout_constraintBottom_toTopOf="@id/navigationButtonsContainer" />
+
+    <!-- Bottom Navigation Buttons -->
+    <LinearLayout
+        android:id="@+id/navigationButtonsContainer"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:gravity="center"
+        android:padding="8dp"
+        android:background="?attr/colorSurface"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toEndOf="parent">
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/btnStatistica"
+            android:layout_width="0dp"
+            android:layout_weight="1"
+            android:layout_height="wrap_content"
+            android:layout_marginEnd="4dp"
+            android:text="@string/btn_statistica"
+            android:textSize="11sp"
+            style="@style/Theme.InnovaMotionApp.Button" />
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/btnActivitati"
+            android:layout_width="0dp"
+            android:layout_weight="1"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="4dp"
+            android:layout_marginEnd="4dp"
+            android:text="@string/btn_activitati"
+            android:textSize="11sp"
+            style="@style/Theme.InnovaMotionApp.Button" />
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/btnConsumEnergetic"
+            android:layout_width="0dp"
+            android:layout_weight="1"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="4dp"
+            android:text="@string/btn_consum_energetic"
+            android:textSize="11sp"
+            style="@style/Theme.InnovaMotionApp.Button" />
+
+    </LinearLayout>
+
 </androidx.constraintlayout.widget.ConstraintLayout>

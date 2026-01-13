@@ -42,9 +42,9 @@ public class GlobalData extends Application {
     public UserDeviceSettingsStorage userDeviceSettingsStorage;
     private final MutableLiveData<Posture> receivedPosture = new MutableLiveData<>();
     private final MutableLiveData<Boolean> isConnectedDevice = new MutableLiveData<>();
-    public String currentUserRole = null; // "supervised" or "supervisor"
+    public String currentUserRole = null; // "aggregator" or "supervisor"
     public String currentUserUid = null;
-    public java.util.List<String> supervisedUserIds = new java.util.ArrayList<>();
+    public java.util.List<String> supervisedSensorIds = new java.util.ArrayList<>();
 
     public MutableLiveData<Boolean> getIsConnectedDevice() {
         return isConnectedDevice;
@@ -75,10 +75,10 @@ public class GlobalData extends Application {
     }
     
     /**
-     * Set supervised user IDs
+     * Set supervised sensor IDs (for supervisor users)
      */
-    public void setSupervisedUserIds(java.util.List<String> supervisedUserIds) {
-        this.supervisedUserIds = supervisedUserIds != null ? new java.util.ArrayList<>(supervisedUserIds) : new java.util.ArrayList<>();
+    public void setSupervisedSensorIds(java.util.List<String> sensorIds) {
+        this.supervisedSensorIds = sensorIds != null ? new java.util.ArrayList<>(sensorIds) : new java.util.ArrayList<>();
     }
     
     /**
@@ -88,7 +88,7 @@ public class GlobalData extends Application {
         android.util.Log.d("GlobalData", "Resetting session data");
         currentUserUid = null;
         currentUserRole = null;
-        supervisedUserIds.clear();
+        supervisedSensorIds.clear();
         
         // Reset LiveData to neutral state
         receivedPosture.postValue(null);

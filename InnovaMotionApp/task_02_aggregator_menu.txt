@@ -1,0 +1,19 @@
+Task: Implement Aggregator Menu Activity
+Priority: High
+Files to Create/Modify:
+- New: app/src/main/java/com/melisa/innovamotionapp/activities/AggregatorMenuActivity.java
+- Modify: app/src/main/java/com/melisa/innovamotionapp/activities/MainActivity.java
+- New: Layout file (activity_aggregator_menu.xml)
+
+Description:
+1. Create `AggregatorMenuActivity`.
+2. Layout should have two main buttons:
+   - "Bluetooth Settings" (navigates to `BtSettingsActivity`)
+   - "Dashboard" (navigates to `AggregatorDashboardActivity`) -> Disable this button if no data is available (check local DB or count).
+3. Modify `MainActivity` routing logic:
+   - If role == "aggregator", route to `AggregatorMenuActivity` instead of directly to Dashboard.
+4. Ensure "Sign Out" functionality is available here or in the toolbar.
+
+Technical Details:
+- Check `ReceivedBtDataDao` count to enable/disable Dashboard button.
+- Use distinct icons for Settings and Dashboard.

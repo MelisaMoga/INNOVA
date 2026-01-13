@@ -4,6 +4,7 @@ import android.content.Context;
 import android.util.Log;
 
 import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
 
 import com.google.android.gms.tasks.OnCompleteListener;
 import com.google.android.gms.tasks.OnFailureListener;
@@ -23,14 +24,17 @@ import com.melisa.innovamotionapp.data.database.InnovaDatabase;
 import com.melisa.innovamotionapp.data.database.ReceivedBtDataDao;
 import com.melisa.innovamotionapp.data.database.ReceivedBtDataEntity;
 import com.melisa.innovamotionapp.data.posture.Posture;
+import com.melisa.innovamotionapp.utils.Constants;
 
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Queue;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.Set;
+import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
@@ -39,14 +43,16 @@ import java.util.concurrent.TimeUnit;
 /**
  * Service responsible for role-aware synchronization between local Room database and Firestore.
  * 
- * For supervised users: Uploads local messages to Firestore
- * For supervisor users: Downloads messages from supervised users to local Room
+ * For aggregator users: Uploads local messages to Firestore
+ * For supervisor users: Downloads messages from aggregators to local Room
  */
 public class FirestoreSyncService {
     private static final String TAG = "FirestoreSyncService";
-    private static final String COLLECTION_BT_DATA = "bluetooth_messages";
-    private static final int BATCH_SIZE = 500; // Firestore batch write limit
+    private static final String COLLECTION_BT_DATA = Constants.FIRESTORE_COLLECTION_BT_DATA;
+    private static final int BATCH_SIZE = Constants.FIRESTORE_BATCH_LIMIT;
     private static final int SUPERVISOR_SYNC_INTERVAL_SECONDS = 10; // Polling interval for supervisor
+    private static final int MAX_OFFLINE_QUEUE_SIZE = 100; // Max packets to queue when offline
+    private static final int MAX_RETRY_ATTEMPTS = Constants.OFFLINE_QUEUE_MAX_RETRIES;
     
     private final Context context;
     private final FirebaseFirestore firestore;
@@ -62,6 +68,22 @@ public class FirestoreSyncService {
     private final Map<String, ListenerRegistration> mirrorByUid = new HashMap<>();
     private final Set<String> startingUids = new HashSet<>();
     private boolean isSupervisorSyncActive = false;
+    
+    // Offline queue for batch sync when connectivity is lost
+    private final Queue<QueuedPacket> offlineQueue = new ConcurrentLinkedQueue<>();
+    
+    /**
+     * Wrapper class for queued packets with retry count tracking
+     */
+    private static class QueuedPacket {
+        final List<ReceivedBtDataEntity> entities;
+        int retryCount;
+        
+        QueuedPacket(List<ReceivedBtDataEntity> entities) {
+            this.entities = new ArrayList<>(entities); // Defensive copy
+            this.retryCount = 0;
+        }
+    }
     
     // Callbacks for sync operations
     public interface SyncCallback {
@@ -130,35 +152,44 @@ public class FirestoreSyncService {
             return;
         }
 
-        if (userSession.isSupervised()) {
-            Log.i(TAG, "Supervised user: syncing local data to Firestore");
+        if (userSession.isAggregator()) {
+            Log.i(TAG, "Aggregator user: syncing local data to Firestore");
+            
+            // First, process any queued packets from when we were offline
+            processOfflineQueue();
+            
+            // Then sync any local data that hasn't been synced yet
             syncLocalDataToFirestore(new SyncCallback() {
                 @Override
                 public void onSuccess(String message) {
-                    Log.i(TAG, "Supervised user sync completed: " + message);
+                    Log.i(TAG, "Aggregator user sync completed: " + message);
                 }
 
                 @Override
                 public void onError(String error) {
-                    Log.w(TAG, "Supervised user sync failed: " + error);
+                    Log.w(TAG, "Aggregator user sync failed: " + error);
                 }
 
                 @Override
                 public void onProgress(int current, int total) {
-                    Log.d(TAG, "Supervised user sync progress: " + current + "/" + total);
+                    Log.d(TAG, "Aggregator user sync progress: " + current + "/" + total);
                 }
             });
         } else if (userSession.isSupervisor()) {
             Log.i(TAG, "Supervisor user: starting download sync");
-            List<String> supervisedUserIds = userSession.getSupervisedUserIds();
-            if (!supervisedUserIds.isEmpty()) {
-                startSupervisorMirrors(supervisedUserIds);
+            List<String> supervisedSensorIds = userSession.getSupervisedSensorIds();
+            // #region agent log
+            // H2: Log supervisor sync initiation
+            android.util.Log.w("DBG_H2", "Supervisor sync check: supervisedSensorIds=" + supervisedSensorIds + ", isEmpty=" + supervisedSensorIds.isEmpty());
+            // #endregion
+            if (!supervisedSensorIds.isEmpty()) {
+                startSupervisorMirrors(supervisedSensorIds);
             }
         }
     }
 
     /**
-     * Sync a new message immediately if user is supervised and online
+     * Sync a new message immediately if user is aggregator and online
      * NOTE: This method does NOT insert into Room - it only syncs to Firestore
      */
     public void syncNewMessage(ReceivedBtDataEntity entity, SyncCallback callback) {
@@ -173,9 +204,9 @@ public class FirestoreSyncService {
             return;
         }
 
-        if (!userSession.isSupervised()) {
-            Log.d(TAG, "User is not supervised, skipping Firestore sync");
-            callback.onSuccess("User is not supervised, no sync needed");
+        if (!userSession.isAggregator()) {
+            Log.d(TAG, "User is not aggregator, skipping Firestore sync");
+            callback.onSuccess("User is not aggregator, no sync needed");
             return;
         }
 
@@ -205,7 +236,8 @@ public class FirestoreSyncService {
             entity.getDeviceAddress(),
             entity.getTimestamp(),
             entity.getReceivedMsg(),
-            user.getUid()
+            user.getUid(),
+            entity.getSensorId()
         );
 
         String documentId = firestoreModel.getDocumentId();
@@ -222,8 +254,247 @@ public class FirestoreSyncService {
                 });
     }
 
+    // ========== BATCH SYNC METHODS ==========
+
     /**
-     * Sync all local data that hasn't been synced to Firestore yet (supervised users only)
+     * Sync an entire packet as a batch write.
+     * More efficient than individual writes - single network round-trip per packet.
+     * 
+     * If offline, the packet is queued and will be synced when connectivity is restored.
+     * 
+     * @param packet List of entities representing one packet from hardware
+     * @param callback Callback for sync result
+     */
+    public void syncPacketBatch(List<ReceivedBtDataEntity> packet, SyncCallback callback) {
+        if (packet == null || packet.isEmpty()) {
+            callback.onSuccess("Empty packet, nothing to sync");
+            return;
+        }
+
+        if (!isUserAuthenticated()) {
+            callback.onError("User not authenticated");
+            return;
+        }
+
+        if (!userSession.isLoaded()) {
+            Log.w(TAG, "User session not loaded, queueing packet for later");
+            queuePacketForLaterSync(packet);
+            callback.onSuccess("Session not loaded, queued for later sync");
+            return;
+        }
+
+        if (!userSession.isAggregator()) {
+            Log.d(TAG, "User is not aggregator, skipping Firestore sync");
+            callback.onSuccess("User is not aggregator, no sync needed");
+            return;
+        }
+
+        if (!connectivityMonitor.isConnected()) {
+            Log.d(TAG, "No connectivity, queueing packet for later sync");
+            queuePacketForLaterSync(packet);
+            callback.onSuccess("Offline, queued for later sync. Queue size: " + offlineQueue.size());
+            return;
+        }
+
+        executorService.execute(() -> {
+            syncPacketBatchInternal(packet, callback);
+        });
+    }
+
+    /**
+     * Internal method to sync a packet batch to Firestore.
+     * Handles WriteBatch 500-doc limit by splitting large packets.
+     */
+    private void syncPacketBatchInternal(List<ReceivedBtDataEntity> packet, SyncCallback callback) {
+        FirebaseUser user = auth.getCurrentUser();
+        if (user == null) {
+            callback.onError("User not authenticated (offline token unavailable); kept locally");
+            return;
+        }
+
+        String userId = user.getUid();
+
+        // If packet is larger than batch limit, split it
+        if (packet.size() > BATCH_SIZE) {
+            Log.i(TAG, "Large packet (" + packet.size() + " docs), splitting into batches");
+            syncLargePacketInBatches(userId, packet, callback);
+            return;
+        }
+
+        // Single batch write for normal-sized packets
+        WriteBatch batch = firestore.batch();
+
+        for (ReceivedBtDataEntity entity : packet) {
+            FirestoreDataModel firestoreModel = new FirestoreDataModel(
+                entity.getDeviceAddress(),
+                entity.getTimestamp(),
+                entity.getReceivedMsg(),
+                userId,
+                entity.getSensorId()
+            );
+
+            String documentId = firestoreModel.getDocumentId();
+            batch.set(
+                firestore.collection(COLLECTION_BT_DATA).document(documentId),
+                firestoreModel.toFirestoreDocument()
+            );
+        }
+
+        batch.commit()
+            .addOnSuccessListener(aVoid -> {
+                Log.d(TAG, "Batch synced successfully: " + packet.size() + " documents");
+                callback.onSuccess("Batch synced: " + packet.size() + " documents");
+            })
+            .addOnFailureListener(e -> {
+                Log.e(TAG, "Failed to sync batch to Firestore", e);
+                callback.onError("Failed to sync batch: " + e.getMessage());
+            });
+    }
+
+    /**
+     * Split a large packet into multiple batches and sync them.
+     */
+    private void syncLargePacketInBatches(String userId, List<ReceivedBtDataEntity> packet, SyncCallback callback) {
+        int totalBatches = (int) Math.ceil((double) packet.size() / BATCH_SIZE);
+        AtomicInteger completedBatches = new AtomicInteger(0);
+        AtomicInteger failedBatches = new AtomicInteger(0);
+
+        for (int i = 0; i < packet.size(); i += BATCH_SIZE) {
+            int endIndex = Math.min(i + BATCH_SIZE, packet.size());
+            List<ReceivedBtDataEntity> batchSlice = packet.subList(i, endIndex);
+
+            WriteBatch batch = firestore.batch();
+
+            for (ReceivedBtDataEntity entity : batchSlice) {
+                FirestoreDataModel firestoreModel = new FirestoreDataModel(
+                    entity.getDeviceAddress(),
+                    entity.getTimestamp(),
+                    entity.getReceivedMsg(),
+                    userId,
+                    entity.getSensorId()
+                );
+
+                String documentId = firestoreModel.getDocumentId();
+                batch.set(
+                    firestore.collection(COLLECTION_BT_DATA).document(documentId),
+                    firestoreModel.toFirestoreDocument()
+                );
+            }
+
+            final int batchNumber = (i / BATCH_SIZE) + 1;
+            batch.commit()
+                .addOnSuccessListener(aVoid -> {
+                    int completed = completedBatches.incrementAndGet();
+                    Log.d(TAG, "Batch " + batchNumber + "/" + totalBatches + " synced");
+                    callback.onProgress(completed, totalBatches);
+
+                    if (completed + failedBatches.get() == totalBatches) {
+                        if (failedBatches.get() == 0) {
+                            callback.onSuccess("All " + packet.size() + " documents synced in " + totalBatches + " batches");
+                        } else {
+                            callback.onError("Synced with errors: " + failedBatches.get() + "/" + totalBatches + " batches failed");
+                        }
+                    }
+                })
+                .addOnFailureListener(e -> {
+                    int failed = failedBatches.incrementAndGet();
+                    Log.e(TAG, "Batch " + batchNumber + "/" + totalBatches + " failed", e);
+
+                    if (completedBatches.get() + failed == totalBatches) {
+                        callback.onError("Synced with errors: " + failed + "/" + totalBatches + " batches failed");
+                    }
+                });
+        }
+    }
+
+    // ========== OFFLINE QUEUE MANAGEMENT ==========
+
+    /**
+     * Queue a packet for later sync when connectivity is restored.
+     * Respects MAX_OFFLINE_QUEUE_SIZE to prevent memory issues.
+     */
+    private void queuePacketForLaterSync(List<ReceivedBtDataEntity> packet) {
+        if (offlineQueue.size() >= MAX_OFFLINE_QUEUE_SIZE) {
+            Log.w(TAG, "Offline queue full (" + MAX_OFFLINE_QUEUE_SIZE + "), dropping oldest packet");
+            offlineQueue.poll(); // Remove oldest packet to make room
+        }
+
+        offlineQueue.add(new QueuedPacket(packet));
+        Log.d(TAG, "Queued packet for later sync. Queue size: " + offlineQueue.size());
+    }
+
+    /**
+     * Process queued packets when connectivity is restored.
+     * Called from handleConnectivityRestored().
+     */
+    private void processOfflineQueue() {
+        if (offlineQueue.isEmpty()) {
+            Log.d(TAG, "Offline queue is empty, nothing to process");
+            return;
+        }
+
+        Log.i(TAG, "Processing offline queue: " + offlineQueue.size() + " packets");
+
+        executorService.execute(() -> {
+            while (!offlineQueue.isEmpty()) {
+                QueuedPacket queuedPacket = offlineQueue.poll();
+                if (queuedPacket == null) continue;
+
+                // Check connectivity before each packet (might lose connection mid-processing)
+                if (!connectivityMonitor.isConnected()) {
+                    Log.w(TAG, "Lost connectivity while processing queue, re-queueing remaining packets");
+                    // Re-queue this packet at the front
+                    offlineQueue.add(queuedPacket);
+                    break;
+                }
+
+                syncPacketBatchInternal(queuedPacket.entities, new SyncCallback() {
+                    @Override
+                    public void onSuccess(String message) {
+                        Log.d(TAG, "Queued packet synced: " + message);
+                    }
+
+                    @Override
+                    public void onError(String error) {
+                        Log.w(TAG, "Failed to sync queued packet: " + error);
+                        // Retry logic
+                        queuedPacket.retryCount++;
+                        if (queuedPacket.retryCount < MAX_RETRY_ATTEMPTS) {
+                            Log.d(TAG, "Re-queueing failed packet (attempt " + queuedPacket.retryCount + "/" + MAX_RETRY_ATTEMPTS + ")");
+                            offlineQueue.add(queuedPacket);
+                        } else {
+                            Log.e(TAG, "Dropping packet after " + MAX_RETRY_ATTEMPTS + " failed attempts");
+                        }
+                    }
+
+                    @Override
+                    public void onProgress(int current, int total) {
+                        // Not used for queued packets
+                    }
+                });
+            }
+
+            Log.i(TAG, "Finished processing offline queue");
+        });
+    }
+
+    /**
+     * Get the current size of the offline queue (for testing/debugging).
+     */
+    public int getOfflineQueueSize() {
+        return offlineQueue.size();
+    }
+
+    /**
+     * Clear the offline queue (for testing/debugging).
+     */
+    public void clearOfflineQueue() {
+        offlineQueue.clear();
+        Log.d(TAG, "Offline queue cleared");
+    }
+
+    /**
+     * Sync all local data that hasn't been synced to Firestore yet (aggregator users only)
      */
     public void syncLocalDataToFirestore(SyncCallback callback) {
         if (!isUserAuthenticated()) {
@@ -231,8 +502,8 @@ public class FirestoreSyncService {
             return;
         }
 
-        if (!userSession.isLoaded() || !userSession.isSupervised()) {
-            callback.onError("User is not supervised or session not loaded");
+        if (!userSession.isLoaded() || !userSession.isAggregator()) {
+            callback.onError("User is not aggregator or session not loaded");
             return;
         }
 
@@ -272,7 +543,7 @@ public class FirestoreSyncService {
         
         // Prepare document IDs and mapping
         for (ReceivedBtDataEntity entity : localData) {
-            String docId = FirestoreDataModel.generateDocumentId(userId, entity.getDeviceAddress(), entity.getTimestamp());
+            String docId = FirestoreDataModel.generateDocumentId(userId, entity.getDeviceAddress(), entity.getSensorId(), entity.getTimestamp());
             documentIds.add(docId);
             localDataMap.put(docId, entity);
         }
@@ -330,7 +601,8 @@ public class FirestoreSyncService {
                     entity.getDeviceAddress(),
                     entity.getTimestamp(),
                     entity.getReceivedMsg(),
-                    userId
+                    userId,
+                    entity.getSensorId()
                 );
                 
                 String documentId = firestoreModel.getDocumentId();
@@ -356,8 +628,8 @@ public class FirestoreSyncService {
     }
 
     /**
-     * Start supervisor sync - downloads messages from supervised users
-     * @deprecated Use startSupervisorMirrors() instead
+     * Start supervisor sync - downloads messages from supervised sensors
+     * @deprecated Use startSupervisorMirrors() with sensor IDs instead
      */
     @Deprecated
     private void startSupervisorSync() {
@@ -371,17 +643,17 @@ public class FirestoreSyncService {
             return;
         }
 
-        List<String> supervisedUserIds = userSession.getSupervisedUserIds();
-        if (supervisedUserIds.isEmpty()) {
-            Log.w(TAG, "No supervised users found, cannot start supervisor sync");
+        List<String> supervisedSensorIds = userSession.getSupervisedSensorIds();
+        if (supervisedSensorIds.isEmpty()) {
+            Log.w(TAG, "No supervised sensors found, cannot start supervisor sync");
             return;
         }
 
-        Log.i(TAG, "Starting supervisor sync for " + supervisedUserIds.size() + " supervised users");
+        Log.i(TAG, "Starting supervisor sync for " + supervisedSensorIds.size() + " supervised sensors");
         isSupervisorSyncActive = true;
 
-        // Start mirrors for each supervised user
-        startSupervisorMirrors(supervisedUserIds);
+        // Start mirrors for each supervised sensor
+        startSupervisorMirrors(supervisedSensorIds);
     }
 
     /**
@@ -404,31 +676,62 @@ public class FirestoreSyncService {
         }
 
         executorService.execute(() -> {
-            List<String> supervisedUserIds = userSession.getSupervisedUserIds();
-            if (supervisedUserIds.isEmpty()) {
-                callback.onSuccess("No supervised users to sync");
+            List<String> supervisedSensorIds = userSession.getSupervisedSensorIds();
+            if (supervisedSensorIds.isEmpty()) {
+                callback.onSuccess("No supervised sensors to sync");
                 return;
             }
 
-            // For manual sync, do a one-time fetch from all supervised users
-            syncFromSupervisedUsers(supervisedUserIds, callback);
+            // For manual sync, do a one-time fetch for all supervised sensors
+            syncFromSupervisedSensors(supervisedSensorIds, callback);
         });
     }
 
-    /**
-     * Sync data from all supervised users (one-time fetch)
-     */
-    private void syncFromSupervisedUsers(List<String> supervisedUserIds, SyncCallback callback) {
-        List<Task<QuerySnapshot>> tasks = new ArrayList<>();
-        Map<Task<QuerySnapshot>, String> taskToUserId = new HashMap<>();
+    // ========== SENSOR-BASED QUERY OPTIMIZATION ==========
+    // Use centralized constant for Firestore whereIn limit
+    private static final int WHEREIN_LIMIT = Constants.FIRESTORE_WHERE_IN_LIMIT;
 
-        for (String supervisedUserId : supervisedUserIds) {
+    /**
+     * Sync data from all supervised sensors using efficient compound queries.
+     * 
+     * Uses whereIn for batching (up to 10 sensors per query).
+     * This is more efficient than N separate queries.
+     * 
+     * @param sensorIds List of sensor IDs to sync
+     * @param callback Callback for sync result
+     */
+    public void syncFromSupervisedSensors(List<String> sensorIds, SyncCallback callback) {
+        // #region agent log
+        android.util.Log.w("DBG_SUP", "syncFromSupervisedSensors: ENTRY, sensorIds=" + sensorIds);
+        // #endregion
+        
+        if (sensorIds.isEmpty()) {
+            // #region agent log
+            android.util.Log.w("DBG_SUP", "syncFromSupervisedSensors: EMPTY sensorIds, returning early");
+            // #endregion
+            callback.onSuccess("No sensors to sync");
+            return;
+        }
+
+        Log.i(TAG, "Syncing from " + sensorIds.size() + " supervised sensors");
+        long startTime = System.currentTimeMillis();
+
+        // Batch sensor IDs into groups of WHEREIN_LIMIT (Firestore limit)
+        List<List<String>> batches = batchSensorIds(sensorIds, WHEREIN_LIMIT);
+        Log.d(TAG, "Split into " + batches.size() + " batches for whereIn queries");
+
+        List<Task<QuerySnapshot>> tasks = new ArrayList<>();
+
+        for (List<String> batch : batches) {
+            // #region agent log
+            // H3: Log the sensorIds being queried
+            android.util.Log.w("DBG_H3", "Querying Firestore whereIn: batchSensorIds=" + batch + ", collection=" + COLLECTION_BT_DATA);
+            // #endregion
             Task<QuerySnapshot> task = firestore.collection(COLLECTION_BT_DATA)
-                    .whereEqualTo("userId", supervisedUserId)
+                    .whereIn("sensorId", batch)
                     .orderBy("timestamp", Query.Direction.ASCENDING)
                     .get();
             tasks.add(task);
-            taskToUserId.put(task, supervisedUserId);
         }
 
         // Wait for all queries to complete
@@ -441,14 +744,20 @@ public class FirestoreSyncService {
                 if (task.isSuccessful()) {
                     QuerySnapshot snapshot = task.getResult();
                     if (snapshot != null) {
-                        String ownerUid = taskToUserId.get(task);
                         for (QueryDocumentSnapshot document : snapshot) {
                             try {
                                 FirestoreDataModel firestoreModel = FirestoreDataModel.fromFirestoreDocument(document.getData());
+                                String sensorId = firestoreModel.getSensorId();
+                                String ownerUid = firestoreModel.getUserId(); // aggregator's UID
+                                
+                                if (sensorId == null) {
+                                    Log.w(TAG, "Document missing sensorId, skipping");
+                                    continue;
+                                }
                                 
                                 // Check if message already exists locally
                                 int exists = dao.messageExistsOwned(
-                                    ownerUid,
+                                    ownerUid != null ? ownerUid : "unknown",
                                     firestoreModel.getDeviceAddress(),
                                     firestoreModel.getTimestamp(),
                                     firestoreModel.getReceivedMsg()
@@ -459,34 +768,69 @@ public class FirestoreSyncService {
                                         firestoreModel.getDeviceAddress(),
                                         firestoreModel.getTimestamp(),
                                         firestoreModel.getReceivedMsg(),
-                                        ownerUid
+                                        ownerUid != null ? ownerUid : "unknown",
+                                        sensorId
                                     );
                                     allEntities.add(entity);
                                 }
                             } catch (Exception e) {
-                                Log.e(TAG, "Error processing supervised user data", e);
+                                Log.e(TAG, "Error processing sensor data", e);
                             }
                         }
                     }
                 } else {
-                    Log.e(TAG, "One of the supervised user queries failed", task.getException());
+                    Log.e(TAG, "One of the sensor batch queries failed", task.getException());
                 }
             }
 
+            long duration = System.currentTimeMillis() - startTime;
+            Log.i(TAG, "Sensor sync completed in " + duration + "ms, " + batches.size() + " queries, " + allEntities.size() + " new entities");
+            
+            // #region agent log
+            // H3: Log Firestore query results
+            android.util.Log.w("DBG_H3", "Firestore query results: newEntitiesCount=" + allEntities.size() + ", batchCount=" + batches.size() + ", durationMs=" + duration);
+            // #endregion
+
             if (allEntities.isEmpty()) {
+                // #region agent log
+                android.util.Log.w("DBG_SUP", "syncFromSupervisedSensors: SUCCESS, no new entities (already up to date)");
+                // #endregion
                 callback.onSuccess("Local database is up to date");
             } else {
                 dao.insertAll(allEntities);
+                // #region agent log
+                android.util.Log.w("DBG_SUP", "syncFromSupervisedSensors: SUCCESS, inserted " + allEntities.size() + " entities");
+                // #endregion
                 callback.onSuccess("Added " + allEntities.size() + " missing messages to local database");
             }
         }).addOnFailureListener(e -> {
-            Log.e(TAG, "Failed to sync from supervised users", e);
-            callback.onError("Failed to sync from supervised users: " + e.getMessage());
+            Log.e(TAG, "Failed to sync from supervised sensors", e);
+            // #region agent log
+            android.util.Log.e("DBG_SUP", "syncFromSupervisedSensors: FAILURE - " + e.getMessage());
+            // #endregion
+            callback.onError("Failed to sync from supervised sensors: " + e.getMessage());
         });
     }
 
     /**
-     * Backfill local Room database from Firestore for supervised users
+     * Batch a list of sensor IDs into groups of specified size.
+     * Required because Firestore whereIn has a limit of 10 values.
+     * 
+     * @param sensorIds Full list of sensor IDs
+     * @param batchSize Maximum batch size (typically 10 for Firestore)
+     * @return List of batches
+     */
+    private List<List<String>> batchSensorIds(List<String> sensorIds, int batchSize) {
+        List<List<String>> batches = new ArrayList<>();
+        for (int i = 0; i < sensorIds.size(); i += batchSize) {
+            int endIndex = Math.min(i + batchSize, sensorIds.size());
+            batches.add(new ArrayList<>(sensorIds.subList(i, endIndex)));
+        }
+        return batches;
+    }
+
+    /**
+     * Backfill local Room database from Firestore for aggregator users
      * This method fetches historical data from Firestore and materializes it into Room
      * Used after app reinstall/clear data or first sign-in to restore local data
      */
@@ -504,9 +848,9 @@ public class FirestoreSyncService {
             return;
         }
 
-        if (!userSession.isSupervised()) {
-            Log.d(TAG, "User is not supervised, skipping backfill");
-            callback.onSuccess("User is not supervised, no backfill needed");
+        if (!userSession.isAggregator()) {
+            Log.d(TAG, "User is not aggregator, skipping backfill");
+            callback.onSuccess("User is not aggregator, no backfill needed");
             return;
         }
 
@@ -536,6 +880,11 @@ public class FirestoreSyncService {
                 long localMaxTimestamp = dao.getMaxTimestampSync();
                 Log.d(TAG, "Local max timestamp: " + localMaxTimestamp);
                 
+                // #region agent log
+                // H3: Log backfill start parameters
+                android.util.Log.w("DBG_H3", "Backfill start: userId=" + userId + ", localMaxTimestamp=" + localMaxTimestamp);
+                // #endregion
+                
                 // Query Firestore for messages newer than local max timestamp
                 firestore.collection(COLLECTION_BT_DATA)
                         .whereEqualTo("userId", userId)
@@ -543,6 +892,11 @@ public class FirestoreSyncService {
                         .whereGreaterThan("timestamp", localMaxTimestamp)
                         .get()
                         .addOnSuccessListener(queryDocumentSnapshots -> {
+                            // #region agent log
+                            // H3: Log backfill query result
+                            android.util.Log.w("DBG_H3", "Backfill query result: count=" + queryDocumentSnapshots.size());
+                            // #endregion
+                            
                             List<ReceivedBtDataEntity> entitiesToInsert = new ArrayList<>();
                             
                             for (QueryDocumentSnapshot document : queryDocumentSnapshots) {
@@ -550,13 +904,15 @@ public class FirestoreSyncService {
                                     FirestoreDataModel firestoreModel = FirestoreDataModel.fromFirestoreDocument(document.getData());
                                     Long ts = firestoreModel.getTimestamp();
                                     String msg = firestoreModel.getReceivedMsg();
+                                    String sensorId = firestoreModel.getSensorId() != null ? firestoreModel.getSensorId() : "unknown";
 
-                                    // ✅ set owner_user_id = current supervised user’s uid
+                                    // ✅ set owner_user_id = current supervised user's uid
                                     ReceivedBtDataEntity entity = new ReceivedBtDataEntity(
                                         firestoreModel.getDeviceAddress(),
                                         ts != null ? ts : 0L,
                                         msg != null ? msg : "",
-                                        userId
+                                        userId,
+                                        sensorId
                                     );
                                     entitiesToInsert.add(entity);
                                     
@@ -615,7 +971,7 @@ public class FirestoreSyncService {
             return;
         }
 
-        if (!userSession.isSupervised()) {
+        if (!userSession.isAggregator()) {
             Log.d(TAG, "User is not supervised, skipping paged backfill");
             callback.onSuccess("User is not supervised, no paged backfill needed");
             return;
@@ -651,7 +1007,7 @@ public class FirestoreSyncService {
     private void fetchPagedBackfillData(String userId, long localMaxTimestamp, 
                                        DocumentSnapshot lastDoc, int totalProcessed, 
                                        SyncCallback callback) {
-        final int PAGE_SIZE = 500;
+        final int PAGE_SIZE = Constants.FIRESTORE_PAGE_SIZE;
         
         Query query = firestore.collection(COLLECTION_BT_DATA)
                 .whereEqualTo("userId", userId)
@@ -672,11 +1028,15 @@ public class FirestoreSyncService {
                     for (QueryDocumentSnapshot document : queryDocumentSnapshots) {
                         try {
                             FirestoreDataModel firestoreModel = FirestoreDataModel.fromFirestoreDocument(document.getData());
+                            String sensorId = firestoreModel.getSensorId() != null ? firestoreModel.getSensorId() : "unknown";
+                            String ownerUid = firestoreModel.getUserId() != null ? firestoreModel.getUserId() : "unknown";
                             
                             ReceivedBtDataEntity entity = new ReceivedBtDataEntity(
                                 firestoreModel.getDeviceAddress(),
                                 firestoreModel.getTimestamp(),
-                                firestoreModel.getReceivedMsg()
+                                firestoreModel.getReceivedMsg(),
+                                ownerUid,
+                                sensorId
                             );
                             entitiesToInsert.add(entity);
                             finalLastDocument = document;
@@ -739,7 +1099,7 @@ public class FirestoreSyncService {
         if (userSession.isSupervisor()) {
             // For supervisors, sync from Firestore to local
             syncFirestoreDataToLocal(callback);
-        } else if (userSession.isSupervised()) {
+        } else if (userSession.isAggregator()) {
             // For supervised users, sync from local to Firestore
             syncLocalDataToFirestore(callback);
         } else {
@@ -919,11 +1279,13 @@ public class FirestoreSyncService {
                                     maxTs = Math.max(maxTs, ts == null ? Long.MIN_VALUE : ts);
                                     
                                     // Build entity — **ALWAYS** assign owner_user_id = supervisedUserId
+                                    String sensorId = firestoreModel.getSensorId() != null ? firestoreModel.getSensorId() : "unknown";
                                     ReceivedBtDataEntity entity = new ReceivedBtDataEntity(
                                         firestoreModel.getDeviceAddress(),
                                         ts != null ? ts : 0L,
                                         msg != null ? msg : "",
-                                        supervisedUserId // <- THIS IS CRITICAL
+                                        supervisedUserId, // <- THIS IS CRITICAL
+                                        sensorId
                                     );
                                     
                                     // OWNER MAPPING VERIFICATION
@@ -995,79 +1357,193 @@ public class FirestoreSyncService {
         });
     }
     
+    // ========== SENSOR-BASED REAL-TIME MIRRORS ==========
+    
+    // Compound listener for multiple sensors (when <= WHEREIN_LIMIT)
+    private ListenerRegistration compoundSensorMirror;
+    
     /**
-     * Start supervisor mirrors for all supervised users
+     * Start supervisor mirrors for all supervised sensors.
+     * 
+     * Trade-off decision:
+     * - For <= 10 sensors: Use single compound whereIn listener (fewer connections)
+     * - For > 10 sensors: Use per-sensor listeners (required due to Firestore limit)
+     * 
+     * Single compound listener pros:
+     * - Fewer WebSocket connections
+     * - Lower overhead
+     * 
+     * Per-sensor listener pros:
+     * - More granular error handling
+     * - Can continue if one sensor fails
+     * 
+     * @param sensorIds List of sensor IDs to monitor
      */
-    private void startSupervisorMirrors(List<String> supervisedUserIds) {
-        Log.i(TAG, "Starting supervisor mirrors for " + supervisedUserIds.size() + " users");
+    public void startSupervisorMirrors(List<String> sensorIds) {
+        Log.i(TAG, "Starting sensor mirrors for " + sensorIds.size() + " sensors");
+        // #region agent log
+        android.util.Log.w("DBG_SUP", "startSupervisorMirrors: ENTRY, sensorIds=" + sensorIds + ", count=" + sensorIds.size());
+        // #endregion
         
-        for (String supervisedUserId : supervisedUserIds) {
-            startSupervisorMirror(supervisedUserId);
+        if (sensorIds.size() <= WHEREIN_LIMIT) {
+            // Use single compound listener for efficiency
+            // #region agent log
+            android.util.Log.w("DBG_SUP", "startSupervisorMirrors: using COMPOUND listener (<=10 sensors)");
+            // #endregion
+            startCompoundSensorMirror(sensorIds);
+        } else {
+            // Fall back to per-sensor listeners (Firestore whereIn limit)
+            Log.i(TAG, "Using per-sensor listeners (>10 sensors)");
+            // #region agent log
+            android.util.Log.w("DBG_SUP", "startSupervisorMirrors: using PER-SENSOR listeners (>10 sensors)");
+            // #endregion
+            for (String sensorId : sensorIds) {
+                startSensorMirror(sensorId);
+            }
         }
     }
     
     /**
-     * Start a single supervisor mirror for a specific supervised user
+     * Start a compound sensor mirror for multiple sensors (up to 10).
+     * Uses whereIn for efficiency - single listener for all sensors.
+     * 
+     * @param sensorIds List of sensor IDs (max 10)
      */
-    public void startSupervisorMirror(String supervisedUserId) {
+    public void startCompoundSensorMirror(List<String> sensorIds) {
+        if (sensorIds.isEmpty()) {
+            Log.w(TAG, "No sensor IDs provided for compound mirror");
+            return;
+        }
+        
+        if (sensorIds.size() > WHEREIN_LIMIT) {
+            Log.w(TAG, "Too many sensors for compound mirror (" + sensorIds.size() + "), falling back to per-sensor");
+            for (String sensorId : sensorIds) {
+                startSensorMirror(sensorId);
+            }
+            return;
+        }
+        
+        // Stop existing compound mirror if any
+        if (compoundSensorMirror != null) {
+            compoundSensorMirror.remove();
+            Log.d(TAG, "Stopped existing compound sensor mirror");
+        }
+        
+        Log.i("SYNC/Mirror", "Starting compound sensor mirror for " + sensorIds.size() + " sensors: " + sensorIds);
+        
+        compoundSensorMirror = firestore.collection(COLLECTION_BT_DATA)
+                .whereIn("sensorId", sensorIds)
+                .orderBy("timestamp", Query.Direction.ASCENDING)
+                .addSnapshotListener((queryDocumentSnapshots, e) -> {
+                    if (e != null) {
+                        Log.e("SYNC/Mirror", "Compound mirror error: " + e.getMessage());
+                        return;
+                    }
+                    if (queryDocumentSnapshots == null) {
+                        Log.w("SYNC/Mirror", "Null snapshot for compound mirror");
+                        return;
+                    }
+                    Log.i("SYNC/Mirror", "Compound mirror event: docs=" + queryDocumentSnapshots.size() + 
+                          " fromCache=" + queryDocumentSnapshots.getMetadata().isFromCache());
+
+                    executorService.execute(() -> {
+                        handleSensorDocumentChanges(queryDocumentSnapshots.getDocumentChanges());
+                    });
+                });
+        
+        Log.i(TAG, "Compound sensor mirror started for " + sensorIds.size() + " sensors");
+    }
+    
+    /**
+     * Start a single sensor mirror for a specific sensor ID.
+     * Used when there are more than 10 sensors (exceeds whereIn limit).
+     * 
+     * @param sensorId The sensor ID to monitor
+     */
+    public void startSensorMirror(String sensorId) {
         // Check if already active
-        if (mirrorByUid.containsKey(supervisedUserId)) {
-            Log.d(TAG, "Mirror already active for " + supervisedUserId);
+        if (mirrorByUid.containsKey(sensorId)) {
+            Log.d(TAG, "Mirror already active for sensor " + sensorId);
             return;
         }
         
         // Check if start is in flight
-        if (startingUids.contains(supervisedUserId)) {
-            Log.d(TAG, "Mirror start already in flight for " + supervisedUserId);
+        if (startingUids.contains(sensorId)) {
+            Log.d(TAG, "Mirror start already in flight for sensor " + sensorId);
             return;
         }
         
-        startingUids.add(supervisedUserId);
-        Log.i("SYNC/Mirror", "Attach listener for childUid=" + supervisedUserId + " query=userId==childUid orderBy timestamp");
+        startingUids.add(sensorId);
+        Log.i("SYNC/Mirror", "Attach listener for sensorId=" + sensorId);
         
         ListenerRegistration listener = firestore.collection(COLLECTION_BT_DATA)
-                .whereEqualTo("userId", supervisedUserId)
+                .whereEqualTo("sensorId", sensorId)
                 .orderBy("timestamp", Query.Direction.ASCENDING)
                 .addSnapshotListener((queryDocumentSnapshots, e) -> {
                     if (e != null) {
-                        Log.e("SYNC/Mirror", "Listen error for " + supervisedUserId + ": " + e.getMessage());
+                        Log.e("SYNC/Mirror", "Listen error for sensor " + sensorId + ": " + e.getMessage());
                         return;
                     }
                     if (queryDocumentSnapshots == null) {
-                        Log.w("SYNC/Mirror", "Null snapshot for " + supervisedUserId);
+                        Log.w("SYNC/Mirror", "Null snapshot for sensor " + sensorId);
                         return;
                     }
-                    Log.i("SYNC/Mirror", "Event for " + supervisedUserId + ": docs=" + queryDocumentSnapshots.size() + " fromCache=" + queryDocumentSnapshots.getMetadata().isFromCache());
+                    Log.i("SYNC/Mirror", "Event for sensor " + sensorId + ": docs=" + queryDocumentSnapshots.size() + 
+                          " fromCache=" + queryDocumentSnapshots.getMetadata().isFromCache());
 
                     executorService.execute(() -> {
-                        handleSupervisorDocumentChanges(queryDocumentSnapshots.getDocumentChanges(), supervisedUserId);
+                        handleSensorDocumentChanges(queryDocumentSnapshots.getDocumentChanges());
                     });
                 });
 
-        mirrorByUid.put(supervisedUserId, listener);
-        startingUids.remove(supervisedUserId);
-        Log.i(TAG, "Supervisor mirror started for " + supervisedUserId);
+        mirrorByUid.put(sensorId, listener);
+        startingUids.remove(sensorId);
+        Log.i(TAG, "Sensor mirror started for " + sensorId);
     }
     
     /**
-     * Stop a single supervisor mirror
+     * @deprecated Use {@link #startSensorMirror(String)} instead.
      */
-    public void stopSupervisorMirror(String supervisedUserId) {
-        ListenerRegistration listener = mirrorByUid.remove(supervisedUserId);
+    @Deprecated
+    public void startSupervisorMirror(String supervisedUserId) {
+        startSensorMirror(supervisedUserId);
+    }
+    
+    /**
+     * Stop a single sensor mirror
+     */
+    public void stopSensorMirror(String sensorId) {
+        ListenerRegistration listener = mirrorByUid.remove(sensorId);
         if (listener != null) {
             listener.remove();
-            Log.d("SYNC/Mirror", "Detach listener for childUid=" + supervisedUserId + " reason=manual_stop");
-            Log.i(TAG, "Stopped supervisor mirror for " + supervisedUserId);
+            Log.d("SYNC/Mirror", "Detach listener for sensorId=" + sensorId);
+            Log.i(TAG, "Stopped sensor mirror for " + sensorId);
         }
-        startingUids.remove(supervisedUserId);
+        startingUids.remove(sensorId);
     }
     
     /**
-     * Stop all supervisor mirrors
+     * @deprecated Use {@link #stopSensorMirror(String)} instead.
+     */
+    @Deprecated
+    public void stopSupervisorMirror(String supervisedUserId) {
+        stopSensorMirror(supervisedUserId);
+    }
+    
+    /**
+     * Stop all sensor mirrors (both compound and per-sensor)
      */
     public void stopAllMirrors() {
-        Log.i(TAG, "Stopping all supervisor mirrors");
+        Log.i(TAG, "Stopping all sensor mirrors");
         
+        // Stop compound mirror if active
+        if (compoundSensorMirror != null) {
+            compoundSensorMirror.remove();
+            compoundSensorMirror = null;
+            Log.d(TAG, "Stopped compound sensor mirror");
+        }
+        
+        // Stop per-sensor mirrors
         for (Map.Entry<String, ListenerRegistration> entry : mirrorByUid.entrySet()) {
             entry.getValue().remove();
         }
@@ -1077,24 +1553,125 @@ public class FirestoreSyncService {
     }
     
     /**
-     * Clear all local data (for sign-out)
+     * Clear all local data (for sign-out).
+     * Fire-and-forget version - use clearLocalData(Runnable) if you need to wait for completion.
      */
     public void clearLocalData() {
-        Log.i(TAG, "Clearing all local data");
+        clearLocalData(null);
+    }
+    
+    /**
+     * Clear all local data with callback notification.
+     * Use this version when you need to wait for the clear operation to complete
+     * before proceeding (e.g., user switch scenarios).
+     * 
+     * @param onComplete Callback invoked on main thread after data is cleared (nullable)
+     */
+    public void clearLocalData(@Nullable Runnable onComplete) {
+        Log.i(TAG, "Clearing all local data" + (onComplete != null ? " (with callback)" : ""));
         executorService.execute(() -> {
             int deletedRows = dao.clearAllData();
-            Log.i(TAG, "Cleared " + deletedRows + " rows from local database");
+            // Also clear monitored persons to prevent stale names on user switch
+            int deletedPersons = localDatabase.monitoredPersonDao().clearAll();
+            Log.i(TAG, "Cleared " + deletedRows + " data rows and " + deletedPersons + " monitored persons");
+            
+            // Notify caller on main thread
+            if (onComplete != null) {
+                new android.os.Handler(android.os.Looper.getMainLooper()).post(onComplete);
+            }
         });
     }
     
     /**
-     * Handle document changes from supervisor listeners with owner assignment
+     * Handle document changes from sensor-based listeners.
+     * Used by both compound and per-sensor mirrors.
+     * 
+     * Extracts sensorId and ownerUid (aggregator) from each document.
      */
+    private void handleSensorDocumentChanges(List<DocumentChange> documentChanges) {
+        List<ReceivedBtDataEntity> entitiesToInsert = new ArrayList<>();
+        long now = System.currentTimeMillis();
+
+        final long RECENT_MS = Constants.FALL_ALERT_RECENT_WINDOW_MS;
+
+        for (DocumentChange change : documentChanges) {
+            if (change.getType() == DocumentChange.Type.ADDED || change.getType() == DocumentChange.Type.MODIFIED) {
+                try {
+                    FirestoreDataModel firestoreModel = FirestoreDataModel.fromFirestoreDocument(change.getDocument().getData());
+                    
+                    String sensorId = firestoreModel.getSensorId();
+                    String ownerUid = firestoreModel.getUserId(); // aggregator's UID
+                    
+                    if (sensorId == null || sensorId.isEmpty()) {
+                        Log.w(TAG, "Document missing sensorId, skipping");
+                        continue;
+                    }
+                    
+                    // Check if message already exists locally
+                    int exists = dao.messageExistsOwned(
+                        ownerUid != null ? ownerUid : "unknown",
+                        firestoreModel.getDeviceAddress(),
+                        firestoreModel.getTimestamp(),
+                        firestoreModel.getReceivedMsg()
+                    );
+
+                    if (exists == 0) {
+                        Long ts = firestoreModel.getTimestamp();
+                        String msg = firestoreModel.getReceivedMsg();
+                        
+                        ReceivedBtDataEntity entity = new ReceivedBtDataEntity(
+                            firestoreModel.getDeviceAddress(),
+                            ts != null ? ts : 0L,
+                            msg != null ? msg : "",
+                            ownerUid != null ? ownerUid : "unknown",
+                            sensorId
+                        );
+                        entitiesToInsert.add(entity);
+                        Log.d(TAG, "New message from sensor " + sensorId + ": " + entity.getReceivedMsg());
+
+                        // If this looks like a fall AND it's recent, notify on supervisor phone
+                        if (msg != null && ts != null && (now - ts) <= RECENT_MS) {
+                            Posture p = com.melisa.innovamotionapp.data.posture.PostureFactory.createPosture(msg);
+                            if (p instanceof com.melisa.innovamotionapp.data.posture.types.FallingPosture) {
+                                // Use PersonNameManager to get display name for notification
+                                final String finalSensorId = sensorId;
+                                com.melisa.innovamotionapp.utils.PersonNameManager.getInstance(context)
+                                    .getDisplayNameAsync(finalSensorId, displayName -> {
+                                        String body = displayName + " " 
+                                                + context.getString(com.melisa.innovamotionapp.R.string.notif_fall_text_generic);
+                                        
+                                        com.melisa.innovamotionapp.utils.AlertNotifications.notifyFall(
+                                                context,
+                                                displayName,
+                                                body
+                                        );
+                                    });
+                            }
+                        }
+                    }
+                } catch (Exception e) {
+                    Log.e(TAG, "Error processing sensor document change", e);
+                }
+            }
+        }
+
+        // Insert new messages into local Room database
+        if (!entitiesToInsert.isEmpty()) {
+            dao.insertAll(entitiesToInsert);
+            Log.i(TAG, "Inserted " + entitiesToInsert.size() + " new messages from sensor mirror");
+        }
+    }
+    
+    /**
+     * Handle document changes from supervisor listeners with owner assignment
+     * @deprecated Use {@link #handleSensorDocumentChanges(List)} instead
+     */
+    @Deprecated
     private void handleSupervisorDocumentChanges(List<DocumentChange> documentChanges, String supervisedUserId) {
         List<ReceivedBtDataEntity> entitiesToInsert = new ArrayList<>();
         long now = System.currentTimeMillis();
 
-        final long RECENT_MS = 60_000 * 1 * 60 * 24; // alert only if within 24 hours
+        final long RECENT_MS = Constants.FALL_ALERT_RECENT_WINDOW_MS;
 
         for (DocumentChange change : documentChanges) {
             if (change.getType() == DocumentChange.Type.ADDED || change.getType() == DocumentChange.Type.MODIFIED) {
@@ -1112,13 +1689,15 @@ public class FirestoreSyncService {
                     if (exists == 0) {
                         Long ts = firestoreModel.getTimestamp();
                         String msg = firestoreModel.getReceivedMsg();
+                        String sensorId = firestoreModel.getSensorId() != null ? firestoreModel.getSensorId() : "unknown";
                         
                         // Build entity — **ensure owner_user_id = supervisedUserId**
                         ReceivedBtDataEntity entity = new ReceivedBtDataEntity(
                             firestoreModel.getDeviceAddress(),
                             ts != null ? ts : 0L,
                             msg != null ? msg : "",
-                            supervisedUserId
+                            supervisedUserId,
+                            sensorId
                         );
                         entitiesToInsert.add(entity);
                         Log.d(TAG, "New message from supervised user " + supervisedUserId + ": " + entity.getReceivedMsg());

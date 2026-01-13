@@ -16,7 +16,7 @@ import android.util.Log;
 import androidx.core.app.NotificationCompat;
 
 import com.melisa.innovamotionapp.R;
-import com.melisa.innovamotionapp.activities.MainActivity;
+import com.melisa.innovamotionapp.activities.AggregatorMenuActivity;
 import com.melisa.innovamotionapp.data.database.InnovaDatabase;
 import com.melisa.innovamotionapp.data.database.ReceivedBtDataEntity;
 import com.melisa.innovamotionapp.data.posture.Posture;
@@ -27,8 +27,10 @@ import com.melisa.innovamotionapp.utils.AlertNotifications;
 import com.melisa.innovamotionapp.utils.Constants;
 import com.melisa.innovamotionapp.utils.GlobalData;
 import com.melisa.innovamotionapp.utils.NotificationConfig;
+import com.melisa.innovamotionapp.utils.PersonNameManager;
 
 import java.io.File;
+import java.util.List;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.util.ArrayList;
@@ -51,6 +53,7 @@ public class DeviceCommunicationService extends Service {
         // Initialize Firestore sync service and user session
         firestoreSyncService = FirestoreSyncService.getInstance(this);
         userSession = UserSession.getInstance(this);
+        personNameManager = PersonNameManager.getInstance(this);
 
         // Start thread that will save receivedData on each second
         // Start the batch-saving thread
@@ -71,26 +74,24 @@ public class DeviceCommunicationService extends Service {
                     if (!currentBatch.isEmpty()) {
                         database.receivedBtDataDao().insertAll(currentBatch);
                         
-                        // Sync each message to Firestore if user is supervised and online
-                        // NOTE: syncNewMessage does NOT insert into Room (we already did that above)
-                        for (ReceivedBtDataEntity entity : currentBatch) {
-                            firestoreSyncService.syncNewMessage(entity, new FirestoreSyncService.SyncCallback() {
-                                @Override
-                                public void onSuccess(String message) {
-                                    Log.d(TAG, "Message synced: " + message);
-                                }
+                        // Sync entire batch to Firestore in a single network call (if aggregator and online)
+                        // This is more efficient than individual writes - single round-trip per batch
+                        firestoreSyncService.syncPacketBatch(currentBatch, new FirestoreSyncService.SyncCallback() {
+                            @Override
+                            public void onSuccess(String message) {
+                                Log.d(TAG, "Batch synced: " + message);
+                            }
 
-                                @Override
-                                public void onError(String error) {
-                                    Log.w(TAG, "Sync error: " + error);
-                                }
+                            @Override
+                            public void onError(String error) {
+                                Log.w(TAG, "Batch sync error: " + error);
+                            }
 
-                                @Override
-                                public void onProgress(int current, int total) {
-                                    // Not used for single message sync
-                                }
-                            });
-                        }
+                            @Override
+                            public void onProgress(int current, int total) {
+                                Log.d(TAG, "Batch sync progress: " + current + "/" + total);
+                            }
+                        });
                     }
                 } catch (InterruptedException e) {
                     Thread.currentThread().interrupt(); // Restore interrupted status
@@ -118,6 +119,12 @@ public class DeviceCommunicationService extends Service {
     // Firestore sync service and user session
     private FirestoreSyncService firestoreSyncService;
     private UserSession userSession;
+    
+    // Person name manager (sensor ID to display name mapping)
+    private PersonNameManager personNameManager;
+    
+    // Multi-user protocol parser
+    private final PacketParser packetParser = new PacketParser();
 
     @Override
     public int onStartCommand(Intent intent, int flags, int startId) {
@@ -183,37 +190,69 @@ public class DeviceCommunicationService extends Service {
                         Log.d(TAG, "ERROR writing posture file", e);
                     }
 
-                    final long now = System.currentTimeMillis();
+                    // Feed line to multi-user protocol parser
+                    List<ParsedReading> readings = packetParser.feedLine(receivedData);
+                    
+                    // If null, the parser is still accumulating (not END_PACKET yet)
+                    if (readings == null) {
+                        return;
+                    }
+                    
+                    // END_PACKET received - process all readings in this packet
+                    if (readings.isEmpty()) {
+                        Log.d(TAG, "[Service] Empty packet received");
+                        return;
+                    }
 
-                    // App policy: user is signed in; Firebase caches UID offline. Fetch UID when supervised.
+                    // App policy: user is signed in; Firebase caches UID offline. Fetch UID when aggregator.
                     String ownerUid = null;
-                    if (userSession.isLoaded() && userSession.isSupervised()) {
+                    if (userSession.isLoaded() && userSession.isAggregator()) {
                         ownerUid = firestoreSyncService.getCurrentUserId(); // cached UID even offline
                     }
-
-                    // IMPORTANT: for supervised users, ensure owner_user_id is set at creation time
-                    final ReceivedBtDataEntity entity = (ownerUid != null)
-                            ? new ReceivedBtDataEntity(device.getAddress(), now, receivedData, ownerUid)
-                            : new ReceivedBtDataEntity(device.getAddress(), now, receivedData);
-
-                    // Always enqueue for local persistence (batch thread will insertAll with IGNORE)
-                    synchronized (lock) {
-                        temporaryReceivedBtDataListToSave.add(entity);
+                    
+                    // If not aggregator/signed-in, we can't store data (need owner)
+                    if (ownerUid == null) {
+                        Log.w(TAG, "[Service] Ignoring packet - no authenticated user");
+                        return;
                     }
 
-                    // Keep existing LiveData/UI updates
-                    Posture posture = PostureFactory.createPosture(receivedData);
-                    GlobalData.getInstance().setReceivedPosture(posture);
-
-                    // Notify fall locally (supervised device)
-                    if (posture instanceof com.melisa.innovamotionapp.data.posture.types.FallingPosture) {
-                        String who = (ownerUid != null) ? ownerUid : "you";
-                        AlertNotifications.notifyFall(
-                                DeviceCommunicationService.this,
-                                who,
-                                getString(R.string.notif_fall_text_generic)
+                    // Process each reading from the packet
+                    for (ParsedReading reading : readings) {
+                        final ReceivedBtDataEntity entity = new ReceivedBtDataEntity(
+                                device.getAddress(),
+                                reading.getReceivedTimestamp(),
+                                reading.getHexCode(),
+                                ownerUid,
+                                reading.getSensorId()
                         );
+
+                        // Register sensor if new (async, creates with sensorId as default name)
+                        personNameManager.ensureSensorExists(reading.getSensorId());
+
+                        // Enqueue for local persistence (batch thread will insertAll with IGNORE)
+                        synchronized (lock) {
+                            temporaryReceivedBtDataListToSave.add(entity);
+                        }
+
+                        // Keep existing LiveData/UI updates (use the last reading's posture)
+                        Posture posture = PostureFactory.createPosture(reading.getHexCode());
+                        GlobalData.getInstance().setReceivedPosture(posture);
+
+                        // Notify fall locally (aggregator device)
+                        if (posture instanceof com.melisa.innovamotionapp.data.posture.types.FallingPosture) {
+                            // Get display name asynchronously and show notification
+                            final String sensorId = reading.getSensorId();
+                            personNameManager.getDisplayNameAsync(sensorId, personName -> {
+                                AlertNotifications.notifyFall(
+                                        DeviceCommunicationService.this,
+                                        personName,
+                                        getString(R.string.notif_fall_text_generic)
+                                );
+                            });
+                        }
                     }
+                    
+                    Log.d(TAG, "[Service] Processed packet with " + readings.size() + " readings");
                 }
 
                 @Override
@@ -289,7 +328,7 @@ public class DeviceCommunicationService extends Service {
     }
 
     private void updateServiceNotification(String title, String text, int iconRes) {
-        Intent openIntent = new Intent(this, MainActivity.class)
+        Intent openIntent = new Intent(this, AggregatorMenuActivity.class)
                 .setAction(NotificationConfig.ACTION_OPEN_FROM_SERVICE);
 
         android.app.PendingIntent contentPI =

@@ -135,6 +135,117 @@ public interface ReceivedBtDataDao {
     @Query("SELECT * FROM received_bt_data WHERE owner_user_id = :userId AND timestamp BETWEEN :start AND :end ORDER BY timestamp ASC")
     LiveData<List<ReceivedBtDataEntity>> getRangeForUserLive(String userId, long start, long end);
 
+    // ======== SENSOR-SPECIFIC QUERIES (Multi-User Protocol) ========
+    
+    /**
+     * Get the latest reading for a specific sensor/person.
+     * Used to show current posture of a monitored person.
+     */
+    @Query("SELECT * FROM received_bt_data WHERE sensor_id = :sensorId ORDER BY timestamp DESC LIMIT 1")
+    LiveData<ReceivedBtDataEntity> getLatestForSensor(String sensorId);
+
+    /**
+     * Get all readings for a specific sensor/person, ordered by timestamp.
+     * Used for history/timeline view of a single person.
+     */
+    @Query("SELECT * FROM received_bt_data WHERE sensor_id = :sensorId ORDER BY timestamp ASC")
+    LiveData<List<ReceivedBtDataEntity>> getAllForSensor(String sensorId);
+
+    /**
+     * Get readings for a specific sensor within a timestamp range.
+     * Used for date-filtered statistics/energy view of a single person.
+     */
+    @Query("SELECT * FROM received_bt_data WHERE sensor_id = :sensorId AND timestamp BETWEEN :startTime AND :endTime ORDER BY timestamp ASC")
+    LiveData<List<ReceivedBtDataEntity>> getRangeForSensor(String sensorId, long startTime, long endTime);
+
+    /**
+     * Get all distinct sensor IDs in the database.
+     * Used to populate dropdown lists of monitored persons.
+     */
+    @Query("SELECT DISTINCT sensor_id FROM received_bt_data")
+    LiveData<List<String>> getDistinctSensorIds();
+
+    /**
+     * Get the latest reading for each sensor (one row per person).
+     * Used for dashboard view showing all monitored persons with their current posture.
+     * 
+     * QUERY OPTIMIZATION NOTE:
+     * This query is efficient because it:
+     * 1. Uses a subquery to find max timestamp per sensor (single pass)
+     * 2. Joins back to get full row data
+     * 3. Avoids N+1 queries (one query for all sensors, not one per sensor)
+     * 
+     * Performance: O(n) where n = total rows, regardless of sensor count.
+     * Much better than N separate queries where N = sensor count.
+     */
+    @Query("SELECT r.* FROM received_bt_data r " +
+           "INNER JOIN (SELECT sensor_id, MAX(timestamp) as max_ts FROM received_bt_data GROUP BY sensor_id) latest " +
+           "ON r.sensor_id = latest.sensor_id AND r.timestamp = latest.max_ts")
+    LiveData<List<ReceivedBtDataEntity>> getLatestForEachSensor();
+
+    /**
+     * Get the latest reading for a specific owner and sensor combination.
+     * Used when supervisor wants to see a specific person from a specific aggregator.
+     */
+    @Query("SELECT * FROM received_bt_data WHERE owner_user_id = :ownerUid AND sensor_id = :sensorId ORDER BY timestamp DESC LIMIT 1")
+    LiveData<ReceivedBtDataEntity> getLatestForOwnerAndSensor(String ownerUid, String sensorId);
+
+    /**
+     * Get all distinct sensor IDs for a specific owner/aggregator.
+     * Used to list all monitored persons belonging to a specific aggregator.
+     */
+    @Query("SELECT DISTINCT sensor_id FROM received_bt_data WHERE owner_user_id = :ownerUid")
+    LiveData<List<String>> getDistinctSensorIdsForOwner(String ownerUid);
+
+    /**
+     * Get the latest reading for each sensor belonging to a specific owner.
+     * Dashboard view for supervisor showing all persons from one aggregator.
+     */
+    @Query("SELECT r.* FROM received_bt_data r " +
+           "INNER JOIN (SELECT sensor_id, MAX(timestamp) as max_ts FROM received_bt_data WHERE owner_user_id = :ownerUid GROUP BY sensor_id) latest " +
+           "ON r.sensor_id = latest.sensor_id AND r.timestamp = latest.max_ts " +
+           "WHERE r.owner_user_id = :ownerUid")
+    LiveData<List<ReceivedBtDataEntity>> getLatestForEachSensorByOwner(String ownerUid);
+
+    /**
+     * Get all readings for a specific owner and sensor, ordered by timestamp.
+     * Used for detailed history of one person from one aggregator.
+     */
+    @Query("SELECT * FROM received_bt_data WHERE owner_user_id = :ownerUid AND sensor_id = :sensorId ORDER BY timestamp ASC")
+    LiveData<List<ReceivedBtDataEntity>> getAllForOwnerAndSensor(String ownerUid, String sensorId);
+
+    /**
+     * Count readings per sensor (for debugging/stats).
+     */
+    @Query("SELECT sensor_id, COUNT(*) as c FROM received_bt_data GROUP BY sensor_id")
+    List<SensorCount> countBySensor();
+
+    /**
+     * Helper class for countBySensor query.
+     */
+    class SensorCount {
+        @androidx.room.ColumnInfo(name = "sensor_id")
+        public String sensorId;
+        @androidx.room.ColumnInfo(name = "c")
+        public int count;
+    }
+
+    // ======== MESSAGE LOG UI QUERIES ========
+    
+    /**
+     * Get recent messages across all sensors, ordered by timestamp descending.
+     * Used for the message log UI.
+     */
+    @Query("SELECT * FROM received_bt_data ORDER BY timestamp DESC LIMIT :limit")
+    LiveData<List<ReceivedBtDataEntity>> getRecentMessages(int limit);
+
+    /**
+     * Get recent messages for a specific sensor, ordered by timestamp descending.
+     * Used for filtered message log UI.
+     */
+    @Query("SELECT * FROM received_bt_data WHERE sensor_id = :sensorId ORDER BY timestamp DESC LIMIT :limit")
+    LiveData<List<ReceivedBtDataEntity>> getMessagesForSensor(String sensorId, int limit);
+
     // TEMPORARY DEBUG HELPERS (remove later)
     @Query("SELECT COUNT(*) FROM received_bt_data")
     int dbgCountAll();

@@ -123,24 +123,24 @@
                             android:text="@string/role_supervisor" />
 
                         <RadioButton
-                            android:id="@+id/role_supervised"
+                            android:id="@+id/role_aggregator"
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
                             android:layout_marginTop="8dp"
-                            android:text="@string/role_supervised" />
+                            android:text="@string/role_aggregator" />
                     </RadioGroup>
 
                     <com.google.android.material.textfield.TextInputLayout
-                        android:id="@+id/supervised_email_layout"
+                        android:id="@+id/aggregator_email_layout"
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:layout_marginTop="8dp"
-                        android:hint="@string/supervised_email_hint"
+                        android:hint="@string/aggregator_email_hint"
                         android:visibility="gone"
                         style="@style/Theme.InnovaMotionApp.TextInputLayout">
 
                         <com.google.android.material.textfield.TextInputEditText
-                            android:id="@+id/supervised_email"
+                            android:id="@+id/aggregator_email"
                             android:layout_width="match_parent"
                             android:layout_height="wrap_content"
                             android:inputType="textEmailAddress"

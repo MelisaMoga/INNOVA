@@ -8,7 +8,7 @@ import androidx.room.RoomDatabase;
 import androidx.room.migration.Migration;
 import androidx.sqlite.db.SupportSQLiteDatabase;
 
-@Database(entities = {ReceivedBtDataEntity.class}, version = 2)
+@Database(entities = {ReceivedBtDataEntity.class, MonitoredPerson.class}, version = 4)
 public abstract class InnovaDatabase extends RoomDatabase {
     private static InnovaDatabase instance;
     
@@ -23,6 +23,8 @@ public abstract class InnovaDatabase extends RoomDatabase {
     };
 
     public abstract ReceivedBtDataDao receivedBtDataDao();
+    
+    public abstract MonitoredPersonDao monitoredPersonDao();
 
     public static synchronized InnovaDatabase getInstance(Context context) {
         if (instance == null) {

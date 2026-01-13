@@ -82,17 +82,18 @@
     <string name="sign_in_with_google">Sign in with Google</string>
     <string name="sign_out">Sign out</string>
     <string name="signed_in_as_placeholder">Signed in</string>
-    <string name="supervised_email_hint">Supervised Gmail address</string>
-    <string name="add_supervised">Add supervised account</string>
+    <string name="aggregator_email_hint">Aggregator Gmail address</string>
+    <string name="add_aggregator">Add aggregator account</string>
     <string name="invalid_email">Please enter a valid Gmail address</string>
-    <string name="supervised_added">Supervised account added</string>
-    <string name="supervised_failed">Failed to add supervised account</string>
+    <string name="aggregator_added">Aggregator account added</string>
+    <string name="aggregator_failed">Failed to add aggregator account</string>
     <string name="choose_account_type">Choose account type</string>
     <string name="role_supervisor">Supervisor</string>
-    <string name="role_supervised">Supervised</string>
+    <string name="role_aggregator">Aggregator</string>
     <string name="proceed">Continue</string>
     <string name="role_required">Please select an account type</string>
-    <string name="supervised_email_required">Please enter the supervised Gmail address</string>
+    <string name="aggregator_email_required">Please enter the aggregator Gmail address</string>
+    <string name="aggregator_description">Collects posture data from monitored sensors</string>
     <string name="role_set_success">Account type saved</string>
     <string name="loading_preferences">Loading your preferences...</string>
     <string name="preferences_load_failed">Could not load preferences, using defaults</string>
@@ -113,6 +114,110 @@
     <string name="notif_bt_text_reconnecting">Trying to reconnect…</string>
 
     <!-- fall notification -->
-    <string name="notif_fall_title">Fall detected</string>
-    <string name="notif_fall_text_generic">A fall may have been detected. Tap to open the app.</string>
+    <string name="notif_fall_title">Fall Detected: %1$s</string>
+    <string name="notif_fall_text_generic">may have fallen. Check immediately.</string>
+
+    <!-- Aggregator Menu -->
+    <string name="aggregator_menu_title">Aggregator Menu</string>
+    <string name="btn_bluetooth_settings">Bluetooth Settings</string>
+    <string name="btn_dashboard">Dashboard</string>
+    <string name="dashboard_no_data_hint">No data available yet</string>
+
+    <!-- Aggregator Dashboard -->
+    <string name="tab_message_log">Messages</string>
+    <string name="tab_live_posture">Posture</string>
+    <string name="filter_label">Filter:</string>
+    <string name="filter_all_sensors">All Sensors</string>
+    <string name="auto_scroll_label">Auto-scroll</string>
+    <string name="no_messages">No messages yet</string>
+    <string name="posture_icon_desc">Posture icon</string>
+    <string name="live_posture_placeholder">Live Posture Viewer\n\nComing in Task 6</string>
+
+    <!-- Live Posture Viewer -->
+    <string name="select_person">Person:</string>
+    <string name="risk_level">Risk:</string>
+    <string name="last_update">Last update: %1$s</string>
+    <string name="no_data_available">No data available</string>
+    <string name="unknown_person">Unknown</string>
+    <string name="no_persons_monitored">No persons being monitored</string>
+
+    <!-- Sensor Navigation Buttons -->
+    <string name="btn_monitorizare">Monitorizare</string>
+    <string name="btn_statistica">Statistica</string>
+    <string name="btn_activitati">Activitati</string>
+    <string name="btn_consum_energetic">Consum energetic</string>
+
+    <!-- Child Activity Titles -->
+    <string name="statistics_title">Statistica</string>
+    <string name="statistics_title_for_person">Statistica: %1$s</string>
+    <string name="activities_title">Activitati</string>
+    <string name="activities_title_for_person">Activitati: %1$s</string>
+    <string name="energy_title">Consum energetic</string>
+    <string name="energy_title_for_person">Consum energetic: %1$s</string>
+
+    <!-- Person Name Management -->
+    <string name="manage_person_names">Manage Names</string>
+    <string name="no_monitored_persons">No monitored persons</string>
+
+    <!-- Supervisor Dashboard -->
+    <string name="supervisor_dashboard">Supervisor Dashboard</string>
+    <string name="no_monitored_persons_supervisor">No persons being monitored.\nWaiting for data from aggregators.</string>
+    <string name="alert_badge_desc">Alert indicator</string>
+    <string name="edit_person_name">Edit Name</string>
+    <string name="sensor_id_label">Sensor ID</string>
+    <string name="display_name_hint">Display Name</string>
+    <string name="save">Save</string>
+    <string name="cancel">Cancel</string>
+    <string name="edit">Edit</string>
+    <string name="name_updated">Name updated to %1$s</string>
+    <string name="no_monitored_persons_hint">Persons will appear here when data is received from sensors</string>
+    <string name="person_icon_desc">Person icon</string>
+
+    <!-- Developer Panel -->
+    <string name="dev_panel_title">Developer Testing Mode</string>
+    <string name="dev_panel_subtitle">Inject mock data for testing</string>
+    <string name="dev_mode_activated">Developer mode activated</string>
+    <string name="select_scenario">Select Test Scenario</string>
+    <string name="run_scenario">Run Scenario</string>
+    <string name="clear_all_data">Clear All Data</string>
+    <string name="db_stats">Database: %1$d messages, %2$d sensors</string>
+    <string name="scenario_running">Running scenario…</string>
+    <string name="scenario_complete">Injected %1$d readings for %2$d sensors</string>
+    <string name="scenario_error">Error: %1$s</string>
+    <string name="data_cleared">All data cleared</string>
+    <string name="close">Close</string>
+
+    <!-- Test Scenario Names -->
+    <string name="scenario_basic_multi_person_title">Basic Multi-Person</string>
+    <string name="scenario_basic_multi_person_desc">3 sensors with varied postures (10 readings each)</string>
+    <string name="scenario_fall_detection_title">Fall Detection</string>
+    <string name="scenario_fall_detection_desc">1 sensor with fall posture - triggers alerts</string>
+    <string name="scenario_stale_data_title">Stale Data</string>
+    <string name="scenario_stale_data_desc">3 sensors with old timestamps - tests yellow status</string>
+    <string name="scenario_high_volume_title">High Volume</string>
+    <string name="scenario_high_volume_desc">10 sensors, 50 readings each - stress test</string>
+    <string name="scenario_name_resolution_title">Name Resolution</string>
+    <string name="scenario_name_resolution_desc">5 sensors with assigned display names</string>
+    <string name="scenario_mixed_states_title">Mixed States</string>
+    <string name="scenario_mixed_states_desc">Active + stale + alert sensors - tests dashboard</string>
+
+    <!-- Firestore sync toggle -->
+    <string name="sync_to_firestore">Also sync to Firestore</string>
+    <string name="syncing_to_firestore">Syncing to Firestore…</string>
+    <string name="firestore_sync_complete">Synced %1$d readings to Firestore</string>
+    <string name="firestore_sync_error">Firestore sync failed: %1$s</string>
+
+    <!-- Sensor Settings / Supervisor Assignment -->
+    <string name="sensor_settings_title">Sensor Settings</string>
+    <string name="supervisor_email_hint">Supervisor Email</string>
+    <string name="supervisor_assigned">Assigned to: %1$s</string>
+    <string name="supervisor_not_assigned">No supervisor assigned</string>
+    <string name="assign_supervisor">Assign Supervisor</string>
+    <string name="unassign_supervisor">Unassign</string>
+    <string name="supervisor_assignment_success">Supervisor assigned successfully</string>
+    <string name="supervisor_assignment_error">Failed to assign supervisor: %1$s</string>
+    <string name="supervisor_unassigned_success">Supervisor unassigned</string>
+    <string name="no_supervisor_found">No supervisor found with that email</string>
+    <string name="searching_supervisors">Searching supervisors…</string>
+    <string name="supervisor_label">Supervisor:</string>
 </resources>

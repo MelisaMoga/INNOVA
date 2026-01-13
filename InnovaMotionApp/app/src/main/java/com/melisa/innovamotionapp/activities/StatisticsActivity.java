@@ -1,7 +1,5 @@
 package com.melisa.innovamotionapp.activities;
 
-import static android.content.ContentValues.TAG;
-
 import android.content.res.Configuration;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
@@ -9,7 +7,6 @@ import android.graphics.Color;
 import android.graphics.drawable.BitmapDrawable;
 import android.graphics.drawable.Drawable;
 import android.os.Bundle;
-import android.util.Log;
 import android.widget.Toast;
 
 import androidx.appcompat.app.AppCompatActivity;
@@ -28,11 +25,13 @@ import com.github.mikephil.charting.utils.ViewPortHandler;
 import com.google.android.material.datepicker.MaterialDatePicker;
 import com.melisa.innovamotionapp.data.database.InnovaDatabase;
 import com.melisa.innovamotionapp.data.database.ReceivedBtDataEntity;
+import com.melisa.innovamotionapp.R;
 import com.melisa.innovamotionapp.data.posture.Posture;
 import com.melisa.innovamotionapp.data.posture.PostureFactory;
 import com.melisa.innovamotionapp.databinding.StatisticsActivityBinding;
 import com.melisa.innovamotionapp.ui.viewmodels.StatisticsViewModel;
 import com.melisa.innovamotionapp.utils.GlobalData;
+import com.melisa.innovamotionapp.utils.Logger;
 import com.melisa.innovamotionapp.utils.TargetUserResolver;
 import com.melisa.innovamotionapp.sync.UserSession;
 
@@ -46,7 +45,21 @@ import java.util.Locale;
 import java.util.Map;
 
 
+/**
+ * Activity for displaying posture statistics in a pie chart.
+ * 
+ * Supports two modes:
+ * 1. User-based filtering: Shows data for the current user
+ * 2. Sensor-based filtering: Shows data for a specific sensor (via intent extras)
+ */
 public class StatisticsActivity extends AppCompatActivity {
+    
+    private static final String TAG = "StatisticsActivity";
+    
+    // Intent extras for sensor-specific viewing
+    public static final String EXTRA_SENSOR_ID = "extra_sensor_id";
+    public static final String EXTRA_PERSON_NAME = "extra_person_name";
+    
     private StatisticsActivityBinding binding;
     private final GlobalData globalData = GlobalData.getInstance();
     private long startDate;
@@ -54,6 +67,10 @@ public class StatisticsActivity extends AppCompatActivity {
     private InnovaDatabase database;
     private StatisticsViewModel viewModel;
     private boolean showDefaultData = true;
+    
+    // Sensor-specific fields
+    private String sensorId;
+    private String personName;
 
 
     @Override
@@ -68,36 +85,51 @@ public class StatisticsActivity extends AppCompatActivity {
         // Initialize ViewModel
         viewModel = new ViewModelProvider(this).get(StatisticsViewModel.class);
 
+        // Extract intent extras
+        sensorId = getIntent().getStringExtra(EXTRA_SENSOR_ID);
+        personName = getIntent().getStringExtra(EXTRA_PERSON_NAME);
+
         // Setting click listener for the date picker button
         binding.dateRangePickerButton.setOnClickListener(view -> datePickerDialog());
         
-        // Resolve and set target user once session is loaded
-        if (UserSession.getInstance(getApplicationContext()).isLoaded()) {
-            String target = TargetUserResolver.resolveTargetUserId(getApplicationContext());
-            viewModel.setTargetUserId(target);
+        // Update title to show person name if available
+        updateTitle();
+        
+        // Choose filtering mode based on whether sensorId is provided
+        if (sensorId != null && !sensorId.isEmpty()) {
+            // Sensor-specific mode: Show data for this sensor only
+            Logger.i(TAG, "Sensor-specific mode: sensorId=" + sensorId + ", name=" + personName);
+            viewModel.setSensorId(sensorId);
         } else {
-            UserSession.getInstance(getApplicationContext()).loadUserSession(new UserSession.SessionLoadCallback() {
-                @Override
-                public void onSessionLoaded(String userId, String role, java.util.List<String> supervisedUserIds) {
-                    String target = TargetUserResolver.resolveTargetUserId(getApplicationContext());
-                    viewModel.setTargetUserId(target);
-                }
+            // User-based mode: Resolve and set target user once session is loaded
+            Logger.d(TAG, "User-based mode: resolving target user");
+            if (UserSession.getInstance(getApplicationContext()).isLoaded()) {
+                String target = TargetUserResolver.resolveTargetUserId(getApplicationContext());
+                viewModel.setTargetUserId(target);
+            } else {
+                UserSession.getInstance(getApplicationContext()).loadUserSession(new UserSession.SessionLoadCallback() {
+                    @Override
+                    public void onSessionLoaded(String userId, String role, java.util.List<String> supervisedUserIds) {
+                        String target = TargetUserResolver.resolveTargetUserId(getApplicationContext());
+                        viewModel.setTargetUserId(target);
+                    }
 
-                @Override
-                public void onSessionLoadError(String error) {
-                    android.util.Log.w("UI/Stats", "Session load error: " + error);
-                }
-            });
+                    @Override
+                    public void onSessionLoadError(String error) {
+                        Logger.w(TAG, "Session load error: " + error);
+                    }
+                });
+            }
         }
 
         viewModel.getAllForUser().observe(this, list -> {
             if (showDefaultData) {
-                Log.i("UI/Stats", "listSize=" + (list != null ? list.size() : 0));
+                Logger.i(TAG, "Received data: listSize=" + (list != null ? list.size() : 0));
                 if (list != null && !list.isEmpty()) {
                     startDate = list.get(0).getTimestamp();
                     endDate = list.get(list.size() - 1).getTimestamp();
                     ReceivedBtDataEntity last = list.get(list.size() - 1);
-                    Log.d("UI/Stats", "last ts=" + last.getTimestamp() + " msg=" + last.getReceivedMsg());
+                    Logger.d(TAG, "Last entry: ts=" + last.getTimestamp() + " msg=" + last.getReceivedMsg());
                     updateWithDateRange(startDate, endDate);
                     onSavedDataChange(list);
                 }
@@ -257,10 +289,10 @@ public class StatisticsActivity extends AppCompatActivity {
             // RANGE
             viewModel.getRangeForUser(startDate, endDate).observe(this, list -> {
                 if (!showDefaultData) {
-                    Log.i("UI/Stats", "range listSize=" + (list != null ? list.size() : 0));
+                    Logger.i(TAG, "Range data: listSize=" + (list != null ? list.size() : 0));
                     if (list != null && !list.isEmpty()) {
                         ReceivedBtDataEntity last = list.get(list.size() - 1);
-                        Log.d("UI/Stats", "range last ts=" + last.getTimestamp() + " msg=" + last.getReceivedMsg());
+                        Logger.d(TAG, "Range last entry: ts=" + last.getTimestamp() + " msg=" + last.getReceivedMsg());
                     }
                     onSavedDataChange(list);
                 }
@@ -312,8 +344,21 @@ public class StatisticsActivity extends AppCompatActivity {
     }
 
     public void log(String msg) {
-        Log.d(TAG, msg);
+        Logger.d(TAG, msg);
         Toast.makeText(this, msg, Toast.LENGTH_SHORT).show();
+    }
+
+    /**
+     * Updates the title to show the person's name when viewing sensor-specific data.
+     */
+    private void updateTitle() {
+        if (personName != null && !personName.isEmpty()) {
+            binding.textView3.setText(getString(R.string.statistics_title_for_person, personName));
+            Logger.d(TAG, "Title updated for person: " + personName);
+        } else {
+            binding.textView3.setText(R.string.statistics_title);
+            Logger.d(TAG, "Using default title");
+        }
     }
 
     private void onSavedDataChange(List<ReceivedBtDataEntity> receivedBtDataEntities) {

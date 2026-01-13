@@ -11,6 +11,8 @@ import com.melisa.innovamotionapp.utils.GlobalData;
 
 import java.util.List;
 
+import com.melisa.innovamotionapp.sync.PersonNamesFirestoreSync;
+
 /**
  * SessionGate manages the authentication and session loading flow.
  * Ensures all sync operations only start after user is authenticated and session is loaded.
@@ -23,6 +25,7 @@ public class SessionGate {
     private final FirebaseAuth auth;
     private final UserSession userSession;
     private final FirestoreSyncService syncService;
+    private final PersonNamesFirestoreSync personNamesSync;
     
     // Session state
     private boolean isSessionReady = false;
@@ -42,6 +45,7 @@ public class SessionGate {
         this.auth = FirebaseAuth.getInstance();
         this.userSession = UserSession.getInstance(context);
         this.syncService = FirestoreSyncService.getInstance(context);
+        this.personNamesSync = PersonNamesFirestoreSync.getInstance(context);
         
         // Set up auth state listener
         setupAuthStateListener();
@@ -87,7 +91,7 @@ public class SessionGate {
         // Update GlobalData singleton with session info
         GlobalData.getInstance().setCurrentUserUid(userId);
         GlobalData.getInstance().setCurrentUserRole(role);
-        GlobalData.getInstance().setSupervisedUserIds(supervisedUserIds);
+        GlobalData.getInstance().setSupervisedSensorIds(supervisedUserIds);
     }
     
     /**
@@ -194,69 +198,129 @@ public class SessionGate {
     /**
      * Run post-authentication bootstrap based on user role
      */
-    private void runPostAuthBootstrap(String role, List<String> supervisedUserIds) {
+    private void runPostAuthBootstrap(String role, List<String> supervisedSensorIds) {
         Log.i(TAG, "Running post-auth bootstrap for role: " + role);
+        // #region agent log
+        android.util.Log.w("DBG_SUP", "runPostAuthBootstrap: role=" + role + ", sensorIds=" + supervisedSensorIds);
+        // #endregion
         
-        if ("supervised".equals(role)) {
-            runSupervisedPipeline();
+        if ("aggregator".equals(role)) {
+            runAggregatorPipeline();
         } else if ("supervisor".equals(role)) {
-            runSupervisorPipeline(supervisedUserIds);
+            runSupervisorPipeline(supervisedSensorIds);
         } else {
             Log.w(TAG, "Unknown role: " + role);
         }
     }
     
     /**
-     * Run supervised user pipeline
+     * Run aggregator user pipeline (backfill their own data from cloud)
      */
-    private void runSupervisedPipeline() {
-        Log.i(TAG, "Starting supervised user pipeline");
+    private void runAggregatorPipeline() {
+        Log.i(TAG, "Starting aggregator pipeline");
+        // #region agent log
+        android.util.Log.w("DBG_SUP", "runAggregatorPipeline: starting backfill for current user");
+        // #endregion
         
         // Backfill current user's data from cloud
         syncService.backfillLocalFromCloudForCurrentUser(new FirestoreSyncService.SyncCallback() {
             @Override
             public void onSuccess(String message) {
-                Log.i(TAG, "Supervised backfill completed: " + message);
+                Log.i(TAG, "Aggregator backfill completed: " + message);
+                // #region agent log
+                android.util.Log.w("DBG_SUP", "runAggregatorPipeline: backfill success - " + message);
+                // #endregion
+                
+                // Also download person names for this aggregator
+                downloadAggregatorPersonNames();
             }
             
             @Override
             public void onError(String error) {
-                Log.w(TAG, "Supervised backfill failed: " + error);
+                Log.w(TAG, "Aggregator backfill failed: " + error);
+                // #region agent log
+                android.util.Log.w("DBG_SUP", "runAggregatorPipeline: backfill error - " + error);
+                // #endregion
+                
+                // Still try to download person names even if message backfill failed
+                downloadAggregatorPersonNames();
             }
             
             @Override
             public void onProgress(int current, int total) {
-                Log.d(TAG, "Supervised backfill progress: " + current + "/" + total);
+                Log.d(TAG, "Aggregator backfill progress: " + current + "/" + total);
             }
         });
     }
     
     /**
-     * Run supervisor pipeline
+     * Download person names for the current aggregator from Firestore.
+     * This ensures display names are restored after account switch.
      */
-    private void runSupervisorPipeline(List<String> supervisedUserIds) {
-        Log.i(TAG, "Starting supervisor pipeline for " + supervisedUserIds.size() + " supervised users");
-        
-        if (supervisedUserIds.isEmpty()) {
-            Log.w(TAG, "No supervised users found for supervisor");
+    private void downloadAggregatorPersonNames() {
+        if (currentUserUid == null) {
+            Log.w(TAG, "Cannot download person names: currentUserUid is null");
             return;
         }
         
-        // Purge old data and backfill for each supervised user
-        syncService.purgeAndBackfillForSupervisor(supervisedUserIds, new FirestoreSyncService.SyncCallback() {
+        Log.i(TAG, "Downloading person names for aggregator: " + currentUserUid);
+        personNamesSync.downloadNamesFromAggregator(currentUserUid, new PersonNamesFirestoreSync.SyncCallback() {
             @Override
             public void onSuccess(String message) {
-                Log.i(TAG, "Supervisor pipeline completed: " + message);
+                Log.i(TAG, "Person names downloaded: " + message);
             }
             
             @Override
             public void onError(String error) {
-                Log.w(TAG, "Supervisor pipeline failed: " + error);
+                Log.w(TAG, "Failed to download person names: " + error);
+            }
+        });
+    }
+    
+    /**
+     * Run supervisor pipeline - sync data for supervised sensors
+     */
+    private void runSupervisorPipeline(List<String> supervisedSensorIds) {
+        Log.i(TAG, "Starting supervisor pipeline for " + supervisedSensorIds.size() + " sensors");
+        // #region agent log
+        android.util.Log.w("DBG_SUP", "runSupervisorPipeline: sensorIds=" + supervisedSensorIds);
+        // #endregion
+        
+        if (supervisedSensorIds.isEmpty()) {
+            Log.w(TAG, "No supervised sensors found for supervisor - check Firestore supervisedSensorIds field");
+            // #region agent log
+            android.util.Log.e("DBG_SUP", "runSupervisorPipeline: EMPTY sensorIds! Supervisor needs supervisedSensorIds in Firestore");
+            // #endregion
+            return;
+        }
+        
+        // First, sync existing data from Firestore for these sensors
+        syncService.syncFromSupervisedSensors(supervisedSensorIds, new FirestoreSyncService.SyncCallback() {
+            @Override
+            public void onSuccess(String message) {
+                Log.i(TAG, "Supervisor initial sync completed: " + message);
+                // #region agent log
+                android.util.Log.w("DBG_SUP", "runSupervisorPipeline: initial sync success - " + message);
+                // #endregion
+                
+                // Now start real-time mirrors for ongoing updates
+                syncService.startSupervisorMirrors(supervisedSensorIds);
+            }
+            
+            @Override
+            public void onError(String error) {
+                Log.w(TAG, "Supervisor initial sync failed: " + error);
+                // #region agent log
+                android.util.Log.e("DBG_SUP", "runSupervisorPipeline: initial sync error - " + error);
+                // #endregion
+                
+                // Still try to start mirrors even if initial sync failed
+                syncService.startSupervisorMirrors(supervisedSensorIds);
             }
             
             @Override
             public void onProgress(int current, int total) {
-                Log.d(TAG, "Supervisor pipeline progress: " + current + "/" + total);
+                Log.d(TAG, "Supervisor sync progress: " + current + "/" + total);
             }
         });
     }
@@ -290,10 +354,19 @@ public class SessionGate {
     }
     
     /**
-     * Get supervised user IDs
+     * Get supervised sensor IDs (for supervisor role).
+     * These are the sensor IDs that this supervisor is allowed to monitor.
      */
+    public List<String> getSupervisedSensorIds() {
+        return supervisedUserIds; // Field is named for backward compat, but contains sensor IDs
+    }
+    
+    /**
+     * @deprecated Use {@link #getSupervisedSensorIds()} instead.
+     */
+    @Deprecated
     public List<String> getSupervisedUserIds() {
-        return supervisedUserIds;
+        return getSupervisedSensorIds();
     }
     
     /**
