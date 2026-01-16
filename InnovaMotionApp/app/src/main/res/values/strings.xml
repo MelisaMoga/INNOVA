@@ -12,6 +12,19 @@
     <string name="bt_scanning_text">Scanare…</string>
     <string name="bt_stopped_scan_text">Scanare</string>
 
+    <!-- Bluetooth Settings Screen -->
+    <string name="bluetooth_status">Bluetooth status</string>
+    <string name="bt_status_disconnected">Disconnected</string>
+    <string name="bt_status_connected">Connected</string>
+    <string name="bt_status_scanning">Scanning…</string>
+    <string name="bt_status_connecting">Connecting…</string>
+    <string name="bt_no_device">No device connected</string>
+    <string name="bt_connected_to">Connected to: %1$s</string>
+    <string name="bt_scan_for_devices">Scan for Devices</string>
+    <string name="bt_disconnect">Disconnect</string>
+    <string name="bt_available_devices">Available Devices</string>
+    <string name="bt_stop_scan">Stop Scan</string>
+
     <!--  Posture formatted messages  -->
     <!--  UnusedFootwearPosture  -->
     <string name="posture_unused_footwear_msg">Papucii il asteapta pe %1$s …</string>

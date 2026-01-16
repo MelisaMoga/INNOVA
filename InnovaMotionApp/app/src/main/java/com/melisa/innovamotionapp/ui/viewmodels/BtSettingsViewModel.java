@@ -93,7 +93,13 @@ public class BtSettingsViewModel extends ViewModel {
         if (mBluetoothAdapter == null || !mBluetoothAdapter.isEnabled()) {
             uiState.setValue(BtSettingsState.BLUETOOTH_OFF);
         } else {
-            uiState.setValue(BtSettingsState.READY_TO_CONNECT);
+            // Check if already connected
+            Boolean isConnected = globalData.getIsConnectedDevice().getValue();
+            if (isConnected != null && isConnected) {
+                uiState.setValue(BtSettingsState.CONNECTED);
+            } else {
+                uiState.setValue(BtSettingsState.DISCONNECTED);
+            }
         }
     }
 
@@ -156,14 +162,81 @@ public class BtSettingsViewModel extends ViewModel {
     }
 
 
+    /**
+     * Disconnects the currently connected device.
+     */
+    public void disconnectDevice() {
+        Log.d(TAG, "Disconnecting device...");
+        deviceCommunicationManager = globalData.deviceCommunicationManager;
+        if (deviceCommunicationManager != null) {
+            deviceCommunicationManager.disconnectDevice();
+        }
+        isConnecting = false;
+        uiState.setValue(BtSettingsState.DISCONNECTED);
+    }
+
+    /**
+     * Checks the current connection state and updates UI accordingly.
+     * Should be called on resume to refresh the UI if state changed externally.
+     */
+    public void checkConnectionState() {
+        Boolean isConnected = globalData.getIsConnectedDevice().getValue();
+        if (isConnected != null && isConnected) {
+            uiState.setValue(BtSettingsState.CONNECTED);
+        } else if (mBluetoothAdapter == null || !mBluetoothAdapter.isEnabled()) {
+            uiState.setValue(BtSettingsState.BLUETOOTH_OFF);
+        } else {
+            uiState.setValue(BtSettingsState.DISCONNECTED);
+        }
+    }
+
+    /**
+     * Gets the name of the currently connected device, if any.
+     * @return Device name or null if not connected
+     */
+    @SuppressLint("MissingPermission")
+    public String getConnectedDeviceName() {
+        deviceCommunicationManager = globalData.deviceCommunicationManager;
+        if (deviceCommunicationManager != null) {
+            BluetoothDevice device = deviceCommunicationManager.getDeviceToConnect();
+            if (device != null) {
+                return device.getName() != null ? device.getName() : device.getAddress();
+            }
+        }
+        return null;
+    }
+
+    /**
+     * Marks the connection as established. Called when connection succeeds.
+     */
+    public void onDeviceConnected() {
+        isConnecting = false;
+        uiState.setValue(BtSettingsState.CONNECTED);
+    }
+
+    /**
+     * Marks the device as disconnected. Called when connection is lost.
+     */
+    public void onDeviceDisconnected() {
+        isConnecting = false;
+        uiState.setValue(BtSettingsState.DISCONNECTED);
+    }
+
+    @SuppressLint("MissingPermission")
+    public void stopScanning() {
+        if (mBluetoothAdapter != null && mBluetoothAdapter.isDiscovering()) {
+            mBluetoothAdapter.cancelDiscovery();
+        }
+        uiState.setValue(BtSettingsState.DISCONNECTED);
+    }
+
     public enum BtSettingsState {
-        BEFORE_BTN_PRESSED,
-        AFTER_BTN_PRESSED,
         BLUETOOTH_OFF,
         ENABLING_BLUETOOTH,
-        READY_TO_CONNECT,
+        DISCONNECTED,      // Ready to scan (replaces READY_TO_CONNECT, BEFORE_BTN_PRESSED)
         SCANNING,
         SCAN_FINISHED,
-        CONNECTING
+        CONNECTING,
+        CONNECTED          // Device is connected
     }
 }

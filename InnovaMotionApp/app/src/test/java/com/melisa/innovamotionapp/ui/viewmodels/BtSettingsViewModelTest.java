@@ -19,21 +19,9 @@ public class BtSettingsViewModelTest {
     @Test
     public void btSettingsState_containsAllExpectedStates() {
         BtSettingsViewModel.BtSettingsState[] states = BtSettingsViewModel.BtSettingsState.values();
-        assertEquals(8, states.length);
-    }
-
-    @Test
-    public void btSettingsState_beforeBtnPressed_exists() {
-        BtSettingsViewModel.BtSettingsState state = BtSettingsViewModel.BtSettingsState.BEFORE_BTN_PRESSED;
-        assertNotNull(state);
-        assertEquals("BEFORE_BTN_PRESSED", state.name());
-    }
-
-    @Test
-    public void btSettingsState_afterBtnPressed_exists() {
-        BtSettingsViewModel.BtSettingsState state = BtSettingsViewModel.BtSettingsState.AFTER_BTN_PRESSED;
-        assertNotNull(state);
-        assertEquals("AFTER_BTN_PRESSED", state.name());
+        // States: BLUETOOTH_OFF, ENABLING_BLUETOOTH, DISCONNECTED, SCANNING, 
+        //         SCAN_FINISHED, CONNECTING, CONNECTED
+        assertEquals(7, states.length);
     }
 
     @Test
@@ -51,10 +39,10 @@ public class BtSettingsViewModelTest {
     }
 
     @Test
-    public void btSettingsState_readyToConnect_exists() {
-        BtSettingsViewModel.BtSettingsState state = BtSettingsViewModel.BtSettingsState.READY_TO_CONNECT;
+    public void btSettingsState_disconnected_exists() {
+        BtSettingsViewModel.BtSettingsState state = BtSettingsViewModel.BtSettingsState.DISCONNECTED;
         assertNotNull(state);
-        assertEquals("READY_TO_CONNECT", state.name());
+        assertEquals("DISCONNECTED", state.name());
     }
 
     @Test
@@ -79,6 +67,13 @@ public class BtSettingsViewModelTest {
     }
 
     @Test
+    public void btSettingsState_connected_exists() {
+        BtSettingsViewModel.BtSettingsState state = BtSettingsViewModel.BtSettingsState.CONNECTED;
+        assertNotNull(state);
+        assertEquals("CONNECTED", state.name());
+    }
+
+    @Test
     public void btSettingsState_valueOf_validName_returnsState() {
         BtSettingsViewModel.BtSettingsState state = 
             BtSettingsViewModel.BtSettingsState.valueOf("SCANNING");
@@ -94,10 +89,10 @@ public class BtSettingsViewModelTest {
     // These test the state machine logic that determines UI updates
 
     @Test
-    public void stateTransition_initialState_shouldBeBeforeBtnPressed() {
+    public void stateTransition_initialState_shouldBeDisconnected() {
         BtSettingsViewModel.BtSettingsState initialState = 
-            BtSettingsViewModel.BtSettingsState.BEFORE_BTN_PRESSED;
-        assertEquals(BtSettingsViewModel.BtSettingsState.BEFORE_BTN_PRESSED, initialState);
+            BtSettingsViewModel.BtSettingsState.DISCONNECTED;
+        assertEquals(BtSettingsViewModel.BtSettingsState.DISCONNECTED, initialState);
     }
 
     @Test
@@ -109,22 +104,29 @@ public class BtSettingsViewModelTest {
     }
 
     @Test
-    public void stateTransition_bluetoothOn_transitionsToReadyToConnect() {
+    public void stateTransition_bluetoothOn_transitionsToDisconnected() {
         // Simulating state flow after Bluetooth is enabled
-        BtSettingsViewModel.BtSettingsState state = simulateBluetoothCheck(true);
-        assertEquals(BtSettingsViewModel.BtSettingsState.READY_TO_CONNECT, state);
+        BtSettingsViewModel.BtSettingsState state = simulateBluetoothCheck(true, false);
+        assertEquals(BtSettingsViewModel.BtSettingsState.DISCONNECTED, state);
+    }
+
+    @Test
+    public void stateTransition_bluetoothOn_alreadyConnected_transitionsToConnected() {
+        // If already connected, should stay connected
+        BtSettingsViewModel.BtSettingsState state = simulateBluetoothCheck(true, true);
+        assertEquals(BtSettingsViewModel.BtSettingsState.CONNECTED, state);
     }
 
     @Test
     public void stateTransition_bluetoothOff_staysBluetoothOff() {
-        BtSettingsViewModel.BtSettingsState state = simulateBluetoothCheck(false);
+        BtSettingsViewModel.BtSettingsState state = simulateBluetoothCheck(false, false);
         assertEquals(BtSettingsViewModel.BtSettingsState.BLUETOOTH_OFF, state);
     }
 
     @Test
-    public void stateTransition_readyToConnect_canStartScanning() {
-        // Simulating: READY_TO_CONNECT -> SCANNING
-        BtSettingsViewModel.BtSettingsState current = BtSettingsViewModel.BtSettingsState.READY_TO_CONNECT;
+    public void stateTransition_disconnected_canStartScanning() {
+        // Simulating: DISCONNECTED -> SCANNING
+        BtSettingsViewModel.BtSettingsState current = BtSettingsViewModel.BtSettingsState.DISCONNECTED;
         BtSettingsViewModel.BtSettingsState next = simulateStartDiscovery(current, true);
         assertEquals(BtSettingsViewModel.BtSettingsState.SCANNING, next);
     }
@@ -148,6 +150,20 @@ public class BtSettingsViewModelTest {
         BtSettingsViewModel.BtSettingsState current = BtSettingsViewModel.BtSettingsState.SCANNING;
         BtSettingsViewModel.BtSettingsState next = simulateConnectToDevice(current);
         assertEquals(BtSettingsViewModel.BtSettingsState.CONNECTING, next);
+    }
+
+    @Test
+    public void stateTransition_connecting_transitionsToConnected() {
+        // After successful connection
+        BtSettingsViewModel.BtSettingsState next = simulateDeviceConnected();
+        assertEquals(BtSettingsViewModel.BtSettingsState.CONNECTED, next);
+    }
+
+    @Test
+    public void stateTransition_connected_canDisconnect() {
+        // CONNECTED -> DISCONNECTED
+        BtSettingsViewModel.BtSettingsState next = simulateDisconnect();
+        assertEquals(BtSettingsViewModel.BtSettingsState.DISCONNECTED, next);
     }
 
     // ========== Device Matching Logic Tests ==========
@@ -259,17 +275,10 @@ public class BtSettingsViewModelTest {
     // ========== UI State Mapping Tests ==========
 
     @Test
-    public void uiState_beforeBtnPressed_buttonShouldBeEnabled() {
+    public void uiState_disconnected_buttonShouldBeEnabled() {
         boolean buttonEnabled = getButtonEnabledForState(
-            BtSettingsViewModel.BtSettingsState.BEFORE_BTN_PRESSED);
+            BtSettingsViewModel.BtSettingsState.DISCONNECTED);
         assertTrue(buttonEnabled);
-    }
-
-    @Test
-    public void uiState_afterBtnPressed_buttonShouldBeDisabled() {
-        boolean buttonEnabled = getButtonEnabledForState(
-            BtSettingsViewModel.BtSettingsState.AFTER_BTN_PRESSED);
-        assertFalse(buttonEnabled);
     }
 
     @Test
@@ -293,16 +302,59 @@ public class BtSettingsViewModelTest {
         assertFalse(buttonEnabled);
     }
 
+    @Test
+    public void uiState_connected_buttonShouldBeEnabled() {
+        // Disconnect button should be enabled when connected
+        boolean buttonEnabled = getButtonEnabledForState(
+            BtSettingsViewModel.BtSettingsState.CONNECTED);
+        assertTrue(buttonEnabled);
+    }
+
+    @Test
+    public void uiState_enablingBluetooth_buttonShouldBeDisabled() {
+        boolean buttonEnabled = getButtonEnabledForState(
+            BtSettingsViewModel.BtSettingsState.ENABLING_BLUETOOTH);
+        assertFalse(buttonEnabled);
+    }
+
+    // ========== Button Action Tests ==========
+
+    @Test
+    public void buttonAction_disconnected_shouldScan() {
+        String action = getButtonActionForState(BtSettingsViewModel.BtSettingsState.DISCONNECTED);
+        assertEquals("SCAN", action);
+    }
+
+    @Test
+    public void buttonAction_scanning_shouldStopScan() {
+        String action = getButtonActionForState(BtSettingsViewModel.BtSettingsState.SCANNING);
+        assertEquals("STOP_SCAN", action);
+    }
+
+    @Test
+    public void buttonAction_connected_shouldDisconnect() {
+        String action = getButtonActionForState(BtSettingsViewModel.BtSettingsState.CONNECTED);
+        assertEquals("DISCONNECT", action);
+    }
+
+    @Test
+    public void buttonAction_bluetoothOff_shouldEnableBluetooth() {
+        String action = getButtonActionForState(BtSettingsViewModel.BtSettingsState.BLUETOOTH_OFF);
+        assertEquals("ENABLE_BLUETOOTH", action);
+    }
+
     // ========== Helper Methods ==========
 
     /**
      * Simulates checkBluetoothState() logic.
      */
-    private BtSettingsViewModel.BtSettingsState simulateBluetoothCheck(boolean isBluetoothEnabled) {
+    private BtSettingsViewModel.BtSettingsState simulateBluetoothCheck(boolean isBluetoothEnabled, boolean isConnected) {
         if (!isBluetoothEnabled) {
             return BtSettingsViewModel.BtSettingsState.BLUETOOTH_OFF;
+        } else if (isConnected) {
+            return BtSettingsViewModel.BtSettingsState.CONNECTED;
         } else {
-            return BtSettingsViewModel.BtSettingsState.READY_TO_CONNECT;
+            return BtSettingsViewModel.BtSettingsState.DISCONNECTED;
         }
     }
 
@@ -346,6 +398,20 @@ public class BtSettingsViewModelTest {
     private BtSettingsViewModel.BtSettingsState simulateConnectToDevice(
             BtSettingsViewModel.BtSettingsState current) {
         return BtSettingsViewModel.BtSettingsState.CONNECTING;
+    }
+
+    /**
+     * Simulates onDeviceConnected() state transition.
+     */
+    private BtSettingsViewModel.BtSettingsState simulateDeviceConnected() {
+        return BtSettingsViewModel.BtSettingsState.CONNECTED;
+    }
+
+    /**
+     * Simulates disconnectDevice() state transition.
+     */
+    private BtSettingsViewModel.BtSettingsState simulateDisconnect() {
+        return BtSettingsViewModel.BtSettingsState.DISCONNECTED;
     }
 
     /**
@@ -399,18 +465,36 @@ public class BtSettingsViewModelTest {
      */
     private boolean getButtonEnabledForState(BtSettingsViewModel.BtSettingsState state) {
         switch (state) {
-            case BEFORE_BTN_PRESSED:
-                return true;
-            case AFTER_BTN_PRESSED:
-                return false;
+            case DISCONNECTED:
             case SCANNING:
-                return true;
             case SCAN_FINISHED:
+            case CONNECTED:
+            case BLUETOOTH_OFF:
                 return true;
+            case ENABLING_BLUETOOTH:
             case CONNECTING:
                 return false;
             default:
                 return false; // Default disabled for safety
+        }
+    }
+
+    /**
+     * Returns the action the button should perform for a given state.
+     */
+    private String getButtonActionForState(BtSettingsViewModel.BtSettingsState state) {
+        switch (state) {
+            case BLUETOOTH_OFF:
+                return "ENABLE_BLUETOOTH";
+            case DISCONNECTED:
+            case SCAN_FINISHED:
+                return "SCAN";
+            case SCANNING:
+                return "STOP_SCAN";
+            case CONNECTED:
+                return "DISCONNECT";
+            default:
+                return "NONE";
         }
     }
 }
