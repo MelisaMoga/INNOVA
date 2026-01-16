@@ -12,6 +12,7 @@ import com.google.firebase.firestore.FirebaseFirestore;
 import com.google.firebase.firestore.QueryDocumentSnapshot;
 import com.melisa.innovamotionapp.data.models.UserProfile;
 import com.melisa.innovamotionapp.utils.Constants;
+import com.melisa.innovamotionapp.utils.GlobalData;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -193,6 +194,34 @@ public class UserSession {
      */
     public boolean hasBothRoles() {
         return isAggregator() && isSupervisor();
+    }
+    
+    /**
+     * Check if user is currently ACTING as aggregator based on their explicit selection.
+     * 
+     * This differs from isAggregator() which checks the Firestore profile roles.
+     * Use this method when you need to respect the user's current role selection
+     * (stored in GlobalData.currentUserRole) rather than their historical profile.
+     * 
+     * @return true if the user has explicitly selected "aggregator" as their current role
+     */
+    public boolean isActingAsAggregator() {
+        String selectedRole = GlobalData.getInstance().currentUserRole;
+        return Constants.ROLE_AGGREGATOR.equals(selectedRole);
+    }
+    
+    /**
+     * Check if user is currently ACTING as supervisor based on their explicit selection.
+     * 
+     * This differs from isSupervisor() which checks the Firestore profile roles.
+     * Use this method when you need to respect the user's current role selection
+     * (stored in GlobalData.currentUserRole) rather than their historical profile.
+     * 
+     * @return true if the user has explicitly selected "supervisor" as their current role
+     */
+    public boolean isActingAsSupervisor() {
+        String selectedRole = GlobalData.getInstance().currentUserRole;
+        return Constants.ROLE_SUPERVISOR.equals(selectedRole);
     }
     
     /**

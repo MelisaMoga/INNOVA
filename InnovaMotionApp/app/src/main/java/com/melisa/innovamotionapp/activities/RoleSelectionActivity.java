@@ -11,13 +11,18 @@ import androidx.appcompat.app.AppCompatActivity;
 import com.google.android.material.button.MaterialButton;
 import com.google.firebase.auth.FirebaseAuth;
 import com.google.firebase.auth.FirebaseUser;
+import com.google.firebase.firestore.FieldValue;
+import com.google.firebase.firestore.FirebaseFirestore;
+import com.google.firebase.firestore.SetOptions;
 import com.melisa.innovamotionapp.R;
 import com.melisa.innovamotionapp.sync.SessionGate;
 import com.melisa.innovamotionapp.sync.UserSession;
 import com.melisa.innovamotionapp.utils.Constants;
 import com.melisa.innovamotionapp.utils.GlobalData;
 
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 /**
  * Simple activity to let users with BOTH roles choose which mode to use.
@@ -73,53 +78,88 @@ public class RoleSelectionActivity extends AppCompatActivity {
         // Set active role in GlobalData for the session
         GlobalData.getInstance().currentUserRole = Constants.ROLE_AGGREGATOR;
         
-        // Start SessionGate bootstrap for aggregator
-        SessionGate.getInstance(this).reloadSessionAndBootstrap(
-            new SessionGate.SessionReadyCallback() {
-                @Override
-                public void onSessionReady(String userId, String role, List<String> supervisedUserIds) {
-                    Intent intent = new Intent(RoleSelectionActivity.this, AggregatorMenuActivity.class);
-                    intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TASK);
-                    startActivity(intent);
-                    finish();
+        // Append role to Firestore (idempotent), then bootstrap
+        appendRoleToFirestore(Constants.ROLE_AGGREGATOR, () -> {
+            // Start SessionGate bootstrap for aggregator
+            SessionGate.getInstance(this).reloadSessionAndBootstrap(
+                new SessionGate.SessionReadyCallback() {
+                    @Override
+                    public void onSessionReady(String userId, String role, List<String> supervisedUserIds) {
+                        Intent intent = new Intent(RoleSelectionActivity.this, AggregatorMenuActivity.class);
+                        intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TASK);
+                        startActivity(intent);
+                        finish();
+                    }
+                    
+                    @Override
+                    public void onSessionError(String error) {
+                        Log.w(TAG, "Session error, proceeding anyway: " + error);
+                        Intent intent = new Intent(RoleSelectionActivity.this, AggregatorMenuActivity.class);
+                        intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TASK);
+                        startActivity(intent);
+                        finish();
+                    }
                 }
-                
-                @Override
-                public void onSessionError(String error) {
-                    Log.w(TAG, "Session error, proceeding anyway: " + error);
-                    Intent intent = new Intent(RoleSelectionActivity.this, AggregatorMenuActivity.class);
-                    intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TASK);
-                    startActivity(intent);
-                    finish();
-                }
-            }
-        );
+            );
+        });
     }
     
     private void navigateToSupervisor() {
         // Set active role in GlobalData for the session
         GlobalData.getInstance().currentUserRole = Constants.ROLE_SUPERVISOR;
         
-        // Start SessionGate bootstrap for supervisor
-        SessionGate.getInstance(this).reloadSessionAndBootstrap(
-            new SessionGate.SessionReadyCallback() {
-                @Override
-                public void onSessionReady(String userId, String role, List<String> supervisedUserIds) {
-                    Intent intent = new Intent(RoleSelectionActivity.this, SupervisorDashboardActivity.class);
-                    intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TASK);
-                    startActivity(intent);
-                    finish();
+        // Append role to Firestore (idempotent), then bootstrap
+        appendRoleToFirestore(Constants.ROLE_SUPERVISOR, () -> {
+            // Start SessionGate bootstrap for supervisor
+            SessionGate.getInstance(this).reloadSessionAndBootstrap(
+                new SessionGate.SessionReadyCallback() {
+                    @Override
+                    public void onSessionReady(String userId, String role, List<String> supervisedUserIds) {
+                        Intent intent = new Intent(RoleSelectionActivity.this, SupervisorDashboardActivity.class);
+                        intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TASK);
+                        startActivity(intent);
+                        finish();
+                    }
+                    
+                    @Override
+                    public void onSessionError(String error) {
+                        Log.w(TAG, "Session error, proceeding anyway: " + error);
+                        Intent intent = new Intent(RoleSelectionActivity.this, SupervisorDashboardActivity.class);
+                        intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TASK);
+                        startActivity(intent);
+                        finish();
+                    }
                 }
-                
-                @Override
-                public void onSessionError(String error) {
-                    Log.w(TAG, "Session error, proceeding anyway: " + error);
-                    Intent intent = new Intent(RoleSelectionActivity.this, SupervisorDashboardActivity.class);
-                    intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TASK);
-                    startActivity(intent);
-                    finish();
-                }
-            }
-        );
+            );
+        });
+    }
+    
+    /**
+     * Appends the selected role to the user's Firestore 'roles' array if not already present.
+     * Uses FieldValue.arrayUnion() which is idempotent - won't duplicate if already exists.
+     */
+    private void appendRoleToFirestore(String role, Runnable onComplete) {
+        FirebaseUser user = FirebaseAuth.getInstance().getCurrentUser();
+        if (user == null) {
+            Log.w(TAG, "No authenticated user, skipping Firestore role update");
+            if (onComplete != null) onComplete.run();
+            return;
+        }
+        
+        FirebaseFirestore db = FirebaseFirestore.getInstance();
+        Map<String, Object> updates = new HashMap<>();
+        updates.put("roles", FieldValue.arrayUnion(role)); // Appends role if not present
+        updates.put("lastSelectedRole", role); // Track last selected for UX
+        
+        db.collection("users").document(user.getUid())
+            .set(updates, SetOptions.merge()) // Merge to not overwrite other fields
+            .addOnSuccessListener(aVoid -> {
+                Log.d(TAG, "✅ Appended role '" + role + "' to Firestore roles array");
+                if (onComplete != null) onComplete.run();
+            })
+            .addOnFailureListener(e -> {
+                Log.w(TAG, "Failed to update Firestore roles, proceeding anyway: " + e.getMessage());
+                if (onComplete != null) onComplete.run();
+            });
     }
 }

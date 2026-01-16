@@ -876,9 +876,11 @@ public class FirestoreSyncService {
             return;
         }
 
-        if (!userSession.isAggregator()) {
-            Log.d(TAG, "User is not aggregator, skipping backfill");
-            callback.onSuccess("User is not aggregator, no backfill needed");
+        // Use isActingAsAggregator() to respect the user's selected role
+        // rather than their Firestore profile roles
+        if (!userSession.isActingAsAggregator()) {
+            Log.d(TAG, "User is not acting as aggregator (selected role != aggregator), skipping backfill");
+            callback.onSuccess("User is not acting as aggregator, no backfill needed");
             return;
         }
 
@@ -999,9 +1001,10 @@ public class FirestoreSyncService {
             return;
         }
 
-        if (!userSession.isAggregator()) {
-            Log.d(TAG, "User is not supervised, skipping paged backfill");
-            callback.onSuccess("User is not supervised, no paged backfill needed");
+        // Use isActingAsAggregator() to respect the user's selected role
+        if (!userSession.isActingAsAggregator()) {
+            Log.d(TAG, "User is not acting as aggregator, skipping paged backfill");
+            callback.onSuccess("User is not acting as aggregator, no paged backfill needed");
             return;
         }
 

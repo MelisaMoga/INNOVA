@@ -204,22 +204,42 @@ public class SessionGate {
     }
     
     /**
-     * Run post-authentication bootstrap based on user roles
+     * Run post-authentication bootstrap based on user's SELECTED role.
+     * 
+     * FIX: For dual-role users, only run the pipeline matching their selected role
+     * (from GlobalData.currentUserRole), not all available roles.
+     * This prevents redundant sync operations and spurious "EMPTY sensorIds" warnings.
      */
     private void runPostAuthBootstrap(List<String> roles) {
-        Log.i(TAG, "Running post-auth bootstrap for roles: " + roles);
+        Log.i(TAG, "Running post-auth bootstrap for available roles: " + roles);
+        
+        // Get the user's SELECTED role (set by RoleSelectionActivity or LoginActivity)
+        String selectedRole = GlobalData.getInstance().currentUserRole;
+        Log.i(TAG, "User's selected role: " + selectedRole);
         // #region agent log
-        android.util.Log.w("DBG_SUP", "runPostAuthBootstrap: roles=" + roles);
+        android.util.Log.w("DBG_SUP", "runPostAuthBootstrap: availableRoles=" + roles + ", selectedRole=" + selectedRole);
         // #endregion
         
-        // Check for aggregator role
-        if (roles.contains("aggregator")) {
+        // Run pipeline based on SELECTED role only (not all available roles)
+        if ("aggregator".equals(selectedRole)) {
+            Log.i(TAG, "Running AGGREGATOR pipeline (user selected aggregator)");
             runAggregatorPipeline();
-        }
-        
-        // Check for supervisor role
-        if (roles.contains("supervisor")) {
+        } else if ("supervisor".equals(selectedRole)) {
+            Log.i(TAG, "Running SUPERVISOR pipeline (user selected supervisor)");
             runSupervisorPipeline();
+        } else if (selectedRole == null || selectedRole.isEmpty()) {
+            // Fallback: if no role explicitly selected, default to first available role
+            // This handles legacy single-role users not routed through RoleSelectionActivity
+            Log.w(TAG, "No role explicitly selected, falling back to first available role");
+            if (roles.contains("aggregator")) {
+                Log.i(TAG, "Running AGGREGATOR pipeline (fallback - first available role)");
+                runAggregatorPipeline();
+            } else if (roles.contains("supervisor")) {
+                Log.i(TAG, "Running SUPERVISOR pipeline (fallback - first available role)");
+                runSupervisorPipeline();
+            }
+        } else {
+            Log.w(TAG, "Unknown selected role: " + selectedRole);
         }
         
         if (roles.isEmpty()) {

@@ -292,6 +292,144 @@ public class SessionGateRoleTest {
                 "supervisor", globalData.getCurrentUserRole());
     }
 
+    // ========== Pipeline Trigger Tests (FIX for dual-role users) ==========
+
+    /**
+     * For dual-role users, only the SELECTED role's pipeline should run.
+     * If user selects "aggregator", only aggregator pipeline runs.
+     */
+    @Test
+    public void testRunPostAuthBootstrap_DualRole_AggregatorSelected_OnlyAggregatorPipelineRuns() {
+        MockGlobalData globalData = new MockGlobalData();
+        MockSessionGateWithPipelines sessionGate = new MockSessionGateWithPipelines(globalData);
+        
+        // User has both roles
+        List<String> availableRoles = Arrays.asList(Constants.ROLE_AGGREGATOR, Constants.ROLE_SUPERVISOR);
+        
+        // User selected aggregator
+        globalData.setCurrentUserRole(Constants.ROLE_AGGREGATOR);
+        
+        // Run bootstrap
+        sessionGate.runPostAuthBootstrap(availableRoles);
+        
+        // Only aggregator pipeline should run
+        assertTrue("Aggregator pipeline should run", sessionGate.aggregatorPipelineRan);
+        assertFalse("Supervisor pipeline should NOT run", sessionGate.supervisorPipelineRan);
+    }
+
+    /**
+     * For dual-role users, only the SELECTED role's pipeline should run.
+     * If user selects "supervisor", only supervisor pipeline runs.
+     */
+    @Test
+    public void testRunPostAuthBootstrap_DualRole_SupervisorSelected_OnlySupervisorPipelineRuns() {
+        MockGlobalData globalData = new MockGlobalData();
+        MockSessionGateWithPipelines sessionGate = new MockSessionGateWithPipelines(globalData);
+        
+        // User has both roles
+        List<String> availableRoles = Arrays.asList(Constants.ROLE_AGGREGATOR, Constants.ROLE_SUPERVISOR);
+        
+        // User selected supervisor
+        globalData.setCurrentUserRole(Constants.ROLE_SUPERVISOR);
+        
+        // Run bootstrap
+        sessionGate.runPostAuthBootstrap(availableRoles);
+        
+        // Only supervisor pipeline should run
+        assertFalse("Aggregator pipeline should NOT run", sessionGate.aggregatorPipelineRan);
+        assertTrue("Supervisor pipeline should run", sessionGate.supervisorPipelineRan);
+    }
+
+    /**
+     * For single-role users without explicit selection (legacy), 
+     * fallback to first available role.
+     */
+    @Test
+    public void testRunPostAuthBootstrap_SingleRole_NoSelection_FallbackToAvailable() {
+        MockGlobalData globalData = new MockGlobalData();
+        MockSessionGateWithPipelines sessionGate = new MockSessionGateWithPipelines(globalData);
+        
+        // User has only aggregator role
+        List<String> availableRoles = Arrays.asList(Constants.ROLE_AGGREGATOR);
+        
+        // No explicit selection (legacy user)
+        globalData.setCurrentUserRole(null);
+        
+        // Run bootstrap
+        sessionGate.runPostAuthBootstrap(availableRoles);
+        
+        // Fallback to aggregator (first available)
+        assertTrue("Aggregator pipeline should run (fallback)", sessionGate.aggregatorPipelineRan);
+        assertFalse("Supervisor pipeline should NOT run", sessionGate.supervisorPipelineRan);
+    }
+
+    /**
+     * For single-role supervisor without explicit selection (legacy), 
+     * fallback to supervisor.
+     */
+    @Test
+    public void testRunPostAuthBootstrap_SingleSupervisor_NoSelection_FallbackToSupervisor() {
+        MockGlobalData globalData = new MockGlobalData();
+        MockSessionGateWithPipelines sessionGate = new MockSessionGateWithPipelines(globalData);
+        
+        // User has only supervisor role
+        List<String> availableRoles = Arrays.asList(Constants.ROLE_SUPERVISOR);
+        
+        // No explicit selection (legacy user)
+        globalData.setCurrentUserRole(null);
+        
+        // Run bootstrap
+        sessionGate.runPostAuthBootstrap(availableRoles);
+        
+        // Fallback to supervisor (first available)
+        assertFalse("Aggregator pipeline should NOT run", sessionGate.aggregatorPipelineRan);
+        assertTrue("Supervisor pipeline should run (fallback)", sessionGate.supervisorPipelineRan);
+    }
+
+    /**
+     * Empty role selection with empty available roles should run no pipelines.
+     */
+    @Test
+    public void testRunPostAuthBootstrap_NoRoles_NoPipelineRuns() {
+        MockGlobalData globalData = new MockGlobalData();
+        MockSessionGateWithPipelines sessionGate = new MockSessionGateWithPipelines(globalData);
+        
+        // No roles available
+        List<String> availableRoles = new ArrayList<>();
+        
+        // No selection
+        globalData.setCurrentUserRole(null);
+        
+        // Run bootstrap
+        sessionGate.runPostAuthBootstrap(availableRoles);
+        
+        // No pipelines should run
+        assertFalse("Aggregator pipeline should NOT run", sessionGate.aggregatorPipelineRan);
+        assertFalse("Supervisor pipeline should NOT run", sessionGate.supervisorPipelineRan);
+    }
+
+    /**
+     * Unknown role selection should run no pipelines.
+     */
+    @Test
+    public void testRunPostAuthBootstrap_UnknownRole_NoPipelineRuns() {
+        MockGlobalData globalData = new MockGlobalData();
+        MockSessionGateWithPipelines sessionGate = new MockSessionGateWithPipelines(globalData);
+        
+        // User has both roles
+        List<String> availableRoles = Arrays.asList(Constants.ROLE_AGGREGATOR, Constants.ROLE_SUPERVISOR);
+        
+        // Unknown role selected (edge case)
+        globalData.setCurrentUserRole("unknown_role");
+        
+        // Run bootstrap
+        sessionGate.runPostAuthBootstrap(availableRoles);
+        
+        // No pipelines should run for unknown role
+        assertFalse("Aggregator pipeline should NOT run", sessionGate.aggregatorPipelineRan);
+        assertFalse("Supervisor pipeline should NOT run", sessionGate.supervisorPipelineRan);
+    }
+
     // ========== Mock Classes ==========
 
     /**
@@ -345,6 +483,54 @@ public class SessionGateRoleTest {
                 globalData.setCurrentUserRole(primaryRole);
             }
             // else: Role was explicitly set - preserve it (do nothing)
+        }
+    }
+
+    /**
+     * Mock SessionGate that tracks which pipelines are triggered.
+     * Used to verify the runPostAuthBootstrap fix for dual-role users.
+     */
+    static class MockSessionGateWithPipelines {
+        private final MockGlobalData globalData;
+        
+        // Flags to track which pipelines ran
+        boolean aggregatorPipelineRan = false;
+        boolean supervisorPipelineRan = false;
+
+        public MockSessionGateWithPipelines(MockGlobalData globalData) {
+            this.globalData = globalData;
+        }
+
+        /**
+         * Mirrors the FIXED runPostAuthBootstrap logic from SessionGate.java.
+         * Only runs the pipeline for the SELECTED role, not all available roles.
+         */
+        public void runPostAuthBootstrap(List<String> roles) {
+            // Get the user's SELECTED role (set by RoleSelectionActivity or LoginActivity)
+            String selectedRole = globalData.getCurrentUserRole();
+            
+            // Run pipeline based on SELECTED role only (not all available roles)
+            if ("aggregator".equals(selectedRole)) {
+                runAggregatorPipeline();
+            } else if ("supervisor".equals(selectedRole)) {
+                runSupervisorPipeline();
+            } else if (selectedRole == null || selectedRole.isEmpty()) {
+                // Fallback: if no role explicitly selected, default to first available role
+                if (roles.contains("aggregator")) {
+                    runAggregatorPipeline();
+                } else if (roles.contains("supervisor")) {
+                    runSupervisorPipeline();
+                }
+            }
+            // Unknown role: no pipeline runs
+        }
+
+        private void runAggregatorPipeline() {
+            aggregatorPipelineRan = true;
+        }
+
+        private void runSupervisorPipeline() {
+            supervisorPipelineRan = true;
         }
     }
 }
