@@ -97,66 +97,6 @@
                         android:paddingBottom="8dp"
                         android:text="@string/signed_in_as_placeholder" />
 
-                    <!-- Role selection header -->
-                    <TextView
-                        android:id="@+id/choose_role_text"
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:text="@string/choose_account_type"
-                        android:textStyle="bold"
-                        android:textSize="16sp"
-                        android:paddingTop="8dp"
-                        android:paddingBottom="4dp"
-                        android:textColor="?attr/colorOnSurface" />
-
-                    <!-- Role selection radio group -->
-                    <RadioGroup
-                        android:id="@+id/role_group"
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:orientation="horizontal">
-
-                        <RadioButton
-                            android:id="@+id/role_supervisor"
-                            android:layout_width="wrap_content"
-                            android:layout_height="wrap_content"
-                            android:text="@string/role_supervisor" />
-
-                        <RadioButton
-                            android:id="@+id/role_aggregator"
-                            android:layout_width="wrap_content"
-                            android:layout_height="wrap_content"
-                            android:layout_marginStart="24dp"
-                            android:text="@string/role_aggregator" />
-                    </RadioGroup>
-
-                    <com.google.android.material.textfield.TextInputLayout
-                        android:id="@+id/aggregator_email_layout"
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:layout_marginTop="8dp"
-                        android:hint="@string/aggregator_email_hint"
-                        android:visibility="gone"
-                        style="@style/Theme.InnovaMotionApp.TextInputLayout">
-
-                        <com.google.android.material.textfield.TextInputEditText
-                            android:id="@+id/aggregator_email"
-                            android:layout_width="match_parent"
-                            android:layout_height="wrap_content"
-                            android:inputType="textEmailAddress"
-                            android:autofillHints="emailAddress" />
-
-                    </com.google.android.material.textfield.TextInputLayout>
-
-                    <!-- Proceed button to continue based on selected role -->
-                    <com.google.android.material.button.MaterialButton
-                        android:id="@+id/proceed_button"
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:layout_marginTop="12dp"
-                        android:text="@string/proceed"
-                        style="@style/Theme.InnovaMotionApp.Button" />
-
                     <com.google.android.material.button.MaterialButton
                         android:id="@+id/sign_out_button"
                         android:layout_width="match_parent"

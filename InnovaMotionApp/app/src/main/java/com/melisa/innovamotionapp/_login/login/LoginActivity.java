@@ -7,12 +7,9 @@ import android.view.View;
 import android.content.Intent;
 import android.widget.Toast;
 import android.widget.TextView;
-import android.widget.RadioGroup;
-import android.widget.RadioButton;
 
 import androidx.annotation.NonNull;
 import androidx.appcompat.app.AppCompatActivity;
-import androidx.core.content.ContextCompat;
 import androidx.credentials.ClearCredentialStateRequest;
 import androidx.credentials.Credential;
 import androidx.credentials.CredentialManager;
@@ -26,23 +23,11 @@ import androidx.credentials.exceptions.GetCredentialException;
 import com.google.android.libraries.identity.googleid.GetGoogleIdOption;
 import com.google.android.libraries.identity.googleid.GoogleIdTokenCredential;
 import com.google.android.material.button.MaterialButton;
-import com.google.android.material.textfield.TextInputEditText;
-import com.google.android.material.textfield.TextInputLayout;
-import android.text.TextWatcher;
-import android.text.Editable;
-import android.widget.ArrayAdapter;
-import android.widget.ListView;
-import android.widget.PopupWindow;
-import android.os.Handler;
-import android.os.Looper;
-import android.view.ViewGroup;
-import android.view.LayoutInflater;
 import com.google.firebase.auth.AuthCredential;
 import com.google.firebase.auth.FirebaseAuth;
 import com.google.firebase.auth.FirebaseUser;
 import com.google.firebase.auth.GoogleAuthProvider;
 import com.google.firebase.firestore.DocumentReference;
-import com.google.firebase.firestore.FieldValue;
 import com.google.firebase.firestore.FirebaseFirestore;
 import com.melisa.innovamotionapp.R;
 import com.melisa.innovamotionapp.activities.AggregatorMenuActivity;
@@ -50,9 +35,6 @@ import com.melisa.innovamotionapp.activities.RoleSelectionActivity;
 import com.melisa.innovamotionapp.activities.SupervisorDashboardActivity;
 import com.melisa.innovamotionapp.data.models.UserProfile;
 import com.melisa.innovamotionapp.sync.FirestoreSyncService;
-import com.melisa.innovamotionapp.sync.SessionGate;
-import com.melisa.innovamotionapp.utils.Constants;
-import com.melisa.innovamotionapp.utils.GlobalData;
 
 import java.util.HashMap;
 import java.util.Map;
@@ -61,12 +43,10 @@ import java.util.List;
 import java.util.ArrayList;
 
 /**
- * LoginActivity with online-only sign-in flow that pre-fills user preferences:
+ * LoginActivity handles Google Sign-In authentication.
  * 
- * - For SUPERVISORS: Pre-fills the aggregator email field from server data
- * - For AGGREGATOR accounts: Pre-fills the radio button selection from server data  
- * - Users can edit any pre-filled values before proceeding
- * - All preferences are fetched fresh from server on each sign-in (no local caching)
+ * After successful authentication, users are directed to RoleSelectionActivity
+ * to choose between Collector (Aggregator) or Supervisor roles.
  */
 public class LoginActivity extends AppCompatActivity {
 
@@ -78,24 +58,9 @@ public class LoginActivity extends AppCompatActivity {
     // UI Elements
     private MaterialButton googleSignInButton;
     private MaterialButton signOutButton;
-    private MaterialButton proceedButton;
     private View signedInSection;
-    private TextInputEditText aggregatorEmailInput;
-    private TextInputLayout aggregatorEmailLayout;
-    private RadioGroup roleGroup;
-    private RadioButton roleSupervisor;
-    private RadioButton roleAggregator;
     private TextView signedInAsText;
     private View loadingProgress;
-
-    // Autocomplete functionality
-    private PopupWindow suggestionPopup;
-    private ListView suggestionListView;
-    private ArrayAdapter<String> emailAdapter;
-    private List<String> aggregatorEmails;
-    private Handler searchHandler;
-    private Runnable searchRunnable;
-    private boolean isSettingTextProgrammatically = false;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -130,127 +95,15 @@ public class LoginActivity extends AppCompatActivity {
         Log.d(TAG, "Initializing UI components");
         googleSignInButton = findViewById(R.id.google_sign_in_button);
         signOutButton = findViewById(R.id.sign_out_button);
-        proceedButton = findViewById(R.id.proceed_button);
-        aggregatorEmailInput = findViewById(R.id.aggregator_email);
-        aggregatorEmailLayout = findViewById(R.id.aggregator_email_layout);
-        roleGroup = findViewById(R.id.role_group);
-        roleSupervisor = findViewById(R.id.role_supervisor);
-        roleAggregator = findViewById(R.id.role_aggregator);
         signedInAsText = findViewById(R.id.signed_in_as_text);
         signedInSection = findViewById(R.id.signed_in_section);
         loadingProgress = findViewById(R.id.loading);
-
-        setupAutocomplete();
-    }
-
-    private void setupAutocomplete() {
-        Log.d(TAG, "Setting up email autocomplete functionality");
-        
-        // Initialize autocomplete components
-        aggregatorEmails = new ArrayList<>();
-        emailAdapter = new ArrayAdapter<>(this, R.layout.autocomplete_item, aggregatorEmails);
-        searchHandler = new Handler(Looper.getMainLooper());
-        
-        if (aggregatorEmailInput != null) {
-            createSuggestionPopup();
-            
-            // Add text change listener for real-time search
-            aggregatorEmailInput.addTextChangedListener(new TextWatcher() {
-                @Override
-                public void beforeTextChanged(CharSequence s, int start, int count, int after) {}
-
-                @Override
-                public void onTextChanged(CharSequence s, int start, int before, int count) {
-                    // Skip search if we're setting text programmatically
-                    if (isSettingTextProgrammatically) {
-                        return;
-                    }
-                    
-                    // Cancel previous search
-                    if (searchRunnable != null) {
-                        searchHandler.removeCallbacks(searchRunnable);
-                    }
-                    
-                    // Schedule new search with delay to avoid too many requests
-                    if (s.length() > 1) {
-                        searchRunnable = () -> searchAggregatorUsers(s.toString());
-                        searchHandler.postDelayed(searchRunnable, 300); // 300ms delay
-                    } else {
-                        // Hide popup when input is too short
-                        hideSuggestionPopup();
-                    }
-                }
-
-                @Override
-                public void afterTextChanged(Editable s) {}
-            });
-            
-            // Hide popup when focus is lost
-            aggregatorEmailInput.setOnFocusChangeListener((v, hasFocus) -> {
-                if (!hasFocus) {
-                    hideSuggestionPopup();
-                }
-            });
-            
-            Log.d(TAG, "Autocomplete setup completed");
-        }
-    }
-
-    private void createSuggestionPopup() {
-        // Create ListView for suggestions
-        suggestionListView = new ListView(this);
-        suggestionListView.setAdapter(emailAdapter);
-        suggestionListView.setDividerHeight(1);
-        suggestionListView.setDivider(ContextCompat.getDrawable(this, android.R.color.transparent));
-        suggestionListView.setBackgroundColor(ContextCompat.getColor(this, android.R.color.white));
-        suggestionListView.setElevation(8f);
-        
-        // Handle item clicks
-        suggestionListView.setOnItemClickListener((parent, view, position, id) -> {
-            String selectedEmail = aggregatorEmails.get(position);
-            Log.d(TAG, "Selected aggregator email from suggestions: " + selectedEmail);
-            
-            // Set flag to prevent triggering search when setting text programmatically
-            isSettingTextProgrammatically = true;
-            aggregatorEmailInput.setText(selectedEmail);
-            aggregatorEmailInput.setSelection(selectedEmail.length());
-            isSettingTextProgrammatically = false;
-            
-            aggregatorEmailLayout.setError(null);
-            hideSuggestionPopup();
-        });
-        
-        // Create popup window
-        suggestionPopup = new PopupWindow(suggestionListView, 
-                ViewGroup.LayoutParams.MATCH_PARENT, 
-                ViewGroup.LayoutParams.WRAP_CONTENT);
-        suggestionPopup.setOutsideTouchable(true);
-        suggestionPopup.setFocusable(false);
-        suggestionPopup.setElevation(8f);
-        suggestionPopup.setBackgroundDrawable(ContextCompat.getDrawable(this, android.R.drawable.editbox_dropdown_light_frame));
     }
 
     private void setupClickListeners() {
         Log.d(TAG, "Setting up click listeners");
         googleSignInButton.setOnClickListener(v -> signInWithGoogle());
         signOutButton.setOnClickListener(v -> signOut());
-        proceedButton.setOnClickListener(v -> onProceed());
-        
-        // Setup role selection listener
-        // Note: Supervisor no longer needs to enter aggregator email - sensors are pre-assigned in Firestore
-        if (roleGroup != null) {
-            roleGroup.setOnCheckedChangeListener((group, checkedId) -> {
-                if (checkedId == R.id.role_supervisor) {
-                    Log.d(TAG, "Supervisor role selected - no email input needed (sensors pre-assigned)");
-                    aggregatorEmailLayout.setVisibility(View.GONE);
-                    aggregatorEmailLayout.setError(null);
-                } else if (checkedId == R.id.role_aggregator) {
-                    Log.d(TAG, "Aggregator role selected - hiding email input");
-                    aggregatorEmailLayout.setVisibility(View.GONE);
-                    aggregatorEmailLayout.setError(null);
-                }
-            });
-        }
     }
 
     @Override
@@ -293,14 +146,6 @@ public class LoginActivity extends AppCompatActivity {
     protected void onDestroy() {
         super.onDestroy();
         Log.d(TAG, "onDestroy - Cleaning up resources");
-        
-        // Clean up search handler
-        if (searchHandler != null && searchRunnable != null) {
-            searchHandler.removeCallbacks(searchRunnable);
-        }
-        
-        // Clean up popup
-        hideSuggestionPopup();
     }
 
     private void signInWithGoogle() {
@@ -459,86 +304,6 @@ public class LoginActivity extends AppCompatActivity {
         finish();
     }
 
-    private void fetchAndPreFillUserPreferences(FirebaseUser user) {
-        Log.d(TAG, "Fetching user preferences from server for UID: " + user.getUid());
-        showLoading(getString(R.string.loading_preferences));
-        
-        DocumentReference userRef = db.collection("users").document(user.getUid());
-        userRef.get()
-                .addOnSuccessListener(document -> {
-                    if (document.exists()) {
-                        String role = document.getString("role");
-                        String aggregatorEmail = document.getString("aggregatorEmail");
-                        String lastSelectedRole = document.getString("lastSelectedRole");
-                        
-                        Log.d(TAG, "Retrieved preferences - role: " + role + 
-                               ", aggregatorEmail: " + aggregatorEmail + 
-                               ", lastSelectedRole: " + lastSelectedRole);
-                        
-                        runOnUiThread(() -> {
-                            hideLoading();
-                            
-                            // Pre-fill based on user type
-                            // Note: Supervisors no longer need email input - sensors are pre-assigned in Firestore
-                            if ("supervisor".equals(role)) {
-                                roleSupervisor.setChecked(true);
-                                aggregatorEmailLayout.setVisibility(View.GONE);
-                                Log.d(TAG, "Pre-filled supervisor role (sensors pre-assigned in Firestore)");
-                            } else if ("aggregator".equals(role)) {
-                                // Pre-fill role selection for aggregator accounts
-                                roleAggregator.setChecked(true);
-                                aggregatorEmailLayout.setVisibility(View.GONE);
-                                Log.d(TAG, "Pre-filled aggregator role selection");
-                            } else if (lastSelectedRole != null) {
-                                // Pre-fill last selected role for users without a set role
-                                if ("supervisor".equals(lastSelectedRole)) {
-                                    roleSupervisor.setChecked(true);
-                                    aggregatorEmailLayout.setVisibility(View.GONE);
-                                } else {
-                                    roleAggregator.setChecked(true);
-                                    aggregatorEmailLayout.setVisibility(View.GONE);
-                                }
-                                Log.d(TAG, "Pre-filled last selected role: " + lastSelectedRole);
-                            } else {
-                                // Default to aggregator if no preferences found
-                                roleAggregator.setChecked(true);
-                                aggregatorEmailLayout.setVisibility(View.GONE);
-                                Log.d(TAG, "No preferences found, defaulting to aggregator role");
-                            }
-                        });
-                    } else {
-                        Log.d(TAG, "No user document found, using defaults");
-                        runOnUiThread(() -> {
-                            hideLoading();
-                            roleAggregator.setChecked(true);
-                            aggregatorEmailLayout.setVisibility(View.GONE);
-                        });
-                    }
-                })
-                .addOnFailureListener(e -> {
-                    Log.w(TAG, "Error fetching user preferences: " + e.getMessage(), e);
-                    runOnUiThread(() -> {
-                        hideLoading();
-                        // Continue with defaults if fetch fails
-                        roleAggregator.setChecked(true);
-                        aggregatorEmailLayout.setVisibility(View.GONE);
-                        showErrorToast(getString(R.string.preferences_load_failed));
-                    });
-                });
-    }
-
-    private void preFillAggregatorEmail(String email) {
-        if (aggregatorEmailInput != null && email != null && !email.isEmpty()) {
-            // Set flag to prevent triggering search when setting text programmatically
-            isSettingTextProgrammatically = true;
-            aggregatorEmailInput.setText(email);
-            aggregatorEmailInput.setSelection(email.length());
-            isSettingTextProgrammatically = false;
-            aggregatorEmailLayout.setError(null);
-            Log.d(TAG, "Pre-filled aggregator email field with: " + email);
-        }
-    }
-
     private void createUserProfile(FirebaseUser user) {
         Log.d(TAG, "Creating user profile for: " + user.getEmail());
         
@@ -564,17 +329,9 @@ public class LoginActivity extends AppCompatActivity {
     }
 
     private void showRoleSelectionUI(FirebaseUser user) {
-        Log.d(TAG, "Showing role selection UI for: " + user.getEmail());
-        runOnUiThread(() -> {
-            googleSignInButton.setVisibility(View.GONE);
-            signedInSection.setVisibility(View.VISIBLE);
-            signOutButton.setVisibility(View.VISIBLE);
-            
-            signedInAsText.setText("Welcome " + user.getDisplayName() + "!\nPlease select your role:");
-        });
-        
-        // Fetch and pre-fill user preferences from server
-        fetchAndPreFillUserPreferences(user);
+        Log.d(TAG, "New user - navigating to role selection for: " + user.getEmail());
+        hideLoading();
+        navigateToRoleSelection();
     }
 
     private void showSignInUI() {
@@ -583,97 +340,6 @@ public class LoginActivity extends AppCompatActivity {
         signedInSection.setVisibility(View.GONE);
         signOutButton.setVisibility(View.GONE);
         hideLoading();
-    }
-
-    private void onProceed() {
-        Log.d(TAG, "Proceed button clicked");
-        
-        FirebaseUser currentUser = mAuth.getCurrentUser();
-        if (currentUser == null) {
-            Log.w(TAG, "No authenticated user found during proceed");
-            showErrorToast("Authentication required");
-            return;
-        }
-
-        int selectedId = roleGroup.getCheckedRadioButtonId();
-        if (selectedId == -1) {
-            showErrorToast("Please select a role");
-            return;
-        }
-
-        showLoading("Saving your role...");
-        proceedButton.setEnabled(false);
-        signOutButton.setEnabled(false);
-
-        String role = (selectedId == R.id.role_supervisor) ? "supervisor" : "aggregator";
-        
-        // Supervisor no longer requires email input - sensors are pre-assigned in Firestore by aggregator
-        // Just save the role and proceed
-        saveUserRole(currentUser, role, null);
-    }
-
-    private void saveUserRole(FirebaseUser user, String role, String aggregatorEmail) {
-        Log.d(TAG, "Saving role '" + role + "' for user: " + user.getUid() + 
-               (aggregatorEmail != null ? ", aggregator email: " + aggregatorEmail : ""));
-
-        // Use arrayUnion to ADD the role without removing existing ones
-        // This allows a user to accumulate multiple roles (aggregator + supervisor)
-        Map<String, Object> updates = new HashMap<>();
-        updates.put("roles", FieldValue.arrayUnion(role)); // MERGE role, don't replace
-        updates.put("role", FieldValue.delete()); // Remove legacy 'role' field to reduce redundancy
-        updates.put("lastSelectedRole", role); // Save for future pre-filling
-        updates.put("lastSignIn", System.currentTimeMillis());
-        if (aggregatorEmail != null && !aggregatorEmail.isEmpty()) {
-            updates.put("aggregatorEmail", aggregatorEmail);
-        }
-
-        db.collection("users").document(user.getUid())
-                .update(updates)
-                .addOnSuccessListener(aVoid -> {
-                    Log.d(TAG, "✅ User role and preferences saved to Firestore");
-                    
-                    // Set the role in GlobalData BEFORE bootstrap to ensure it's preserved
-                    // This prevents SessionGate.updateSessionCache from overwriting the user's choice
-                    GlobalData.getInstance().setCurrentUserRole(role);
-                    
-                    // Show loading while we reload session
-                    showLoading("Loading your account...");
-                    
-                    // NOW reload session and trigger bootstrap with confirmed role
-                    SessionGate.getInstance(this).reloadSessionAndBootstrap(
-                        new SessionGate.SessionReadyCallback() {
-                            @Override
-                            public void onSessionReady(String userId, String confirmedRole, List<String> supervisedUserIds) {
-                                Log.i(TAG, "✅ Session ready with confirmed role: " + confirmedRole);
-                                runOnUiThread(() -> {
-                                    hideLoading();
-                                    showSuccessToast("Role set successfully!");
-                                    navigateBasedOnRole(confirmedRole);
-                                });
-                            }
-                            
-                            @Override
-                            public void onSessionError(String error) {
-                                Log.e(TAG, "⚠️ Session reload failed: " + error);
-                                runOnUiThread(() -> {
-                                    hideLoading();
-                                    showErrorToast("Session error: " + error);
-                                    // Proceed anyway using the role that was being saved
-                                    navigateBasedOnRole(role);
-                                });
-                            }
-                        }
-                    );
-                })
-                .addOnFailureListener(e -> {
-                    Log.e(TAG, "Failed to save user role", e);
-                    runOnUiThread(() -> {
-                        hideLoading();
-                        proceedButton.setEnabled(true);
-                        signOutButton.setEnabled(true);
-                        handleFirestoreError(e);
-                    });
-                });
     }
 
     private void signOut() {
@@ -746,91 +412,11 @@ public class LoginActivity extends AppCompatActivity {
         }
     }
 
-    private void searchAggregatorUsers(String query) {
-        if (query.trim().isEmpty() || query.length() < 2) {
-            return;
-        }
-
-        Log.d(TAG, "Searching for aggregator users matching: '" + query + "'");
-        
-        // Search for users with role 'aggregator' and email containing the query
-        db.collection("users")
-                .whereEqualTo("role", "aggregator")
-                .get()
-                .addOnSuccessListener(queryDocumentSnapshots -> {
-                    List<String> matchingEmails = new ArrayList<>();
-                    String lowerQuery = query.toLowerCase();
-                    
-                    queryDocumentSnapshots.forEach(document -> {
-                        String email = document.getString("email");
-                        if (email != null && email.toLowerCase().contains(lowerQuery)) {
-                            matchingEmails.add(email);
-                            Log.d(TAG, "Found matching aggregator user: " + email);
-                        }
-                    });
-                    
-                    Log.d(TAG, "Search completed: " + matchingEmails.size() + " aggregator users found matching '" + query + "'");
-                    
-                    runOnUiThread(() -> {
-                        aggregatorEmails.clear();
-                        aggregatorEmails.addAll(matchingEmails);
-                        emailAdapter.notifyDataSetChanged();
-                        
-                        if (!matchingEmails.isEmpty() && aggregatorEmailInput.hasFocus()) {
-                            Log.d(TAG, "Showing popup with " + matchingEmails.size() + " suggestions");
-                            showSuggestionPopup();
-                        } else if (matchingEmails.isEmpty()) {
-                            Log.d(TAG, "No aggregator users found matching '" + query + "' - user can enter manually");
-                            hideSuggestionPopup();
-                        }
-                    });
-                })
-                .addOnFailureListener(e -> {
-                    Log.w(TAG, "Error searching aggregator users: " + e.getMessage(), e);
-                    // Don't show error to user, just continue with manual entry
-                    // This allows the flow to continue even if database is unavailable
-                });
-    }
-
-    private void showSuggestionPopup() {
-        if (suggestionPopup != null && !suggestionPopup.isShowing() && aggregatorEmailInput != null) {
-            try {
-                // Calculate popup width to match the TextInputLayout
-                int width = aggregatorEmailLayout != null ? aggregatorEmailLayout.getWidth() : aggregatorEmailInput.getWidth();
-                suggestionPopup.setWidth(width);
-                
-                // Show popup below the input field
-                suggestionPopup.showAsDropDown(aggregatorEmailInput, 0, 0);
-                Log.d(TAG, "Suggestion popup shown with " + aggregatorEmails.size() + " items");
-            } catch (Exception e) {
-                Log.w(TAG, "Error showing suggestion popup", e);
-            }
-        }
-    }
-
-    private void hideSuggestionPopup() {
-        if (suggestionPopup != null && suggestionPopup.isShowing()) {
-            try {
-                suggestionPopup.dismiss();
-                Log.d(TAG, "Suggestion popup hidden");
-            } catch (Exception e) {
-                Log.w(TAG, "Error hiding suggestion popup", e);
-            }
-        }
-    }
-
-    private boolean isValidGmail(String email) {
-        return email.matches("^[A-Za-z0-9+_.-]+@gmail\\.com$");
-    }
-
     private void showLoading(String message) {
         Log.d(TAG, "Showing loading: " + message);
         runOnUiThread(() -> {
             loadingProgress.setVisibility(View.VISIBLE);
-        googleSignInButton.setEnabled(false);
-            if (proceedButton != null) {
-                proceedButton.setEnabled(false);
-            }
+            googleSignInButton.setEnabled(false);
             if (signOutButton != null) {
                 signOutButton.setEnabled(false);
             }
@@ -841,10 +427,7 @@ public class LoginActivity extends AppCompatActivity {
         Log.d(TAG, "Hiding loading");
         runOnUiThread(() -> {
             loadingProgress.setVisibility(View.GONE);
-        googleSignInButton.setEnabled(true);
-            if (proceedButton != null) {
-                proceedButton.setEnabled(true);
-            }
+            googleSignInButton.setEnabled(true);
             if (signOutButton != null) {
                 signOutButton.setEnabled(true);
             }
