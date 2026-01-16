@@ -1,6 +1,9 @@
 package com.melisa.innovamotionapp.activities;
 
+import android.Manifest;
 import android.content.Intent;
+import android.content.pm.PackageManager;
+import android.os.Build;
 import android.os.Bundle;
 import android.view.Menu;
 import android.view.MenuItem;
@@ -49,8 +52,25 @@ public class SupervisorDashboardActivity extends BaseActivity {
         setupRecyclerView();
         setupSwipeRefresh();
         observeData();
+        
+        // Request notification permission for alerts (Android 13+)
+        requestNotificationPermission();
 
         Logger.i(TAG, "SupervisorDashboardActivity initialized");
+    }
+    
+    /**
+     * Request POST_NOTIFICATIONS permission on Android 13+ (Tiramisu).
+     * Required for supervisors to receive posture alert notifications.
+     */
+    private void requestNotificationPermission() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            if (checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS)
+                    != PackageManager.PERMISSION_GRANTED) {
+                Logger.d(TAG, "Requesting POST_NOTIFICATIONS permission");
+                requestPermissions(new String[]{Manifest.permission.POST_NOTIFICATIONS}, 1001);
+            }
+        }
     }
 
     private void setupToolbar() {

@@ -177,6 +177,82 @@ public class SessionGateRoleTest {
                 Constants.ROLE_AGGREGATOR, globalData.getCurrentUserRole());
     }
 
+    // ========== LoginActivity Flow Tests ==========
+
+    /**
+     * Simulates the LoginActivity.saveUserRole flow where a user selects a role
+     * via radio buttons for the first time. GlobalData should be set BEFORE
+     * reloadSessionAndBootstrap to ensure the role is preserved.
+     */
+    @Test
+    public void testLoginActivityFlow_RoleSetBeforeBootstrap() {
+        MockGlobalData globalData = new MockGlobalData();
+        MockSessionGate sessionGate = new MockSessionGate(globalData);
+        
+        // Step 1: User is new, no prior role
+        globalData.setCurrentUserRole(null);
+        
+        // Step 2: User selects "aggregator" via radio button in LoginActivity
+        // LoginActivity.saveUserRole saves to Firestore, then sets GlobalData
+        globalData.setCurrentUserRole(Constants.ROLE_AGGREGATOR);
+        
+        // Step 3: LoginActivity calls reloadSessionAndBootstrap
+        // This internally calls updateSessionCache with the updated roles from Firestore
+        List<String> rolesFromFirestore = Arrays.asList(Constants.ROLE_AGGREGATOR);
+        sessionGate.updateSessionCache("newuser123", rolesFromFirestore);
+        
+        // Step 4: Role should be preserved as aggregator
+        assertEquals("Role set in LoginActivity should survive bootstrap",
+                Constants.ROLE_AGGREGATOR, globalData.getCurrentUserRole());
+    }
+
+    /**
+     * Simulates LoginActivity flow when user adds a second role.
+     * E.g., user was aggregator, now also becomes supervisor.
+     * The newly selected role should be preserved.
+     */
+    @Test
+    public void testLoginActivityFlow_AddingSecondRole() {
+        MockGlobalData globalData = new MockGlobalData();
+        MockSessionGate sessionGate = new MockSessionGate(globalData);
+        
+        // Step 1: User was previously an aggregator, session had aggregator role
+        globalData.setCurrentUserRole(Constants.ROLE_AGGREGATOR);
+        
+        // Step 2: User signs out, signs back in, chooses supervisor role via radio button
+        // LoginActivity.saveUserRole uses FieldValue.arrayUnion to add supervisor
+        globalData.setCurrentUserRole(Constants.ROLE_SUPERVISOR);
+        
+        // Step 3: Firestore now has both roles (aggregator first in array)
+        List<String> rolesFromFirestore = Arrays.asList(Constants.ROLE_AGGREGATOR, Constants.ROLE_SUPERVISOR);
+        sessionGate.updateSessionCache("user123", rolesFromFirestore);
+        
+        // Step 4: Role should be "supervisor" (the newly selected role), NOT "aggregator"
+        assertEquals("Newly selected supervisor role should be preserved even if aggregator is first in profile",
+                Constants.ROLE_SUPERVISOR, globalData.getCurrentUserRole());
+    }
+
+    /**
+     * Tests that if LoginActivity forgets to set GlobalData before bootstrap,
+     * the first role from Firestore is used (regression scenario).
+     */
+    @Test
+    public void testLoginActivityFlow_WithoutSettingGlobalData_DefaultsToFirst() {
+        MockGlobalData globalData = new MockGlobalData();
+        MockSessionGate sessionGate = new MockSessionGate(globalData);
+        
+        // Step 1: User has no role set (simulates bug where LoginActivity doesn't set GlobalData)
+        globalData.setCurrentUserRole(null);
+        
+        // Step 2: Bootstrap happens with both roles from Firestore
+        List<String> rolesFromFirestore = Arrays.asList(Constants.ROLE_AGGREGATOR, Constants.ROLE_SUPERVISOR);
+        sessionGate.updateSessionCache("user123", rolesFromFirestore);
+        
+        // Step 3: Without explicit selection, defaults to first (aggregator)
+        assertEquals("Without explicit selection, should default to first role",
+                Constants.ROLE_AGGREGATOR, globalData.getCurrentUserRole());
+    }
+
     // ========== Edge Case Tests ==========
 
     /**

@@ -52,6 +52,7 @@ import com.melisa.innovamotionapp.data.models.UserProfile;
 import com.melisa.innovamotionapp.sync.FirestoreSyncService;
 import com.melisa.innovamotionapp.sync.SessionGate;
 import com.melisa.innovamotionapp.utils.Constants;
+import com.melisa.innovamotionapp.utils.GlobalData;
 
 import java.util.HashMap;
 import java.util.Map;
@@ -630,6 +631,10 @@ public class LoginActivity extends AppCompatActivity {
                 .update(updates)
                 .addOnSuccessListener(aVoid -> {
                     Log.d(TAG, "✅ User role and preferences saved to Firestore");
+                    
+                    // Set the role in GlobalData BEFORE bootstrap to ensure it's preserved
+                    // This prevents SessionGate.updateSessionCache from overwriting the user's choice
+                    GlobalData.getInstance().setCurrentUserRole(role);
                     
                     // Show loading while we reload session
                     showLoading("Loading your account...");

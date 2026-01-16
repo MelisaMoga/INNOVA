@@ -1,5 +1,8 @@
 package com.melisa.innovamotionapp.activities;
 
+import android.Manifest;
+import android.content.pm.PackageManager;
+import android.os.Build;
 import android.os.Bundle;
 import android.view.View;
 
@@ -44,6 +47,24 @@ public class AggregatorMenuActivity extends BaseActivity {
         
         // Initial dashboard button state (will be updated in onBaseResume)
         updateDashboardButtonState(false);
+        
+        // Request notification permission for foreground service (Android 13+)
+        requestNotificationPermission();
+    }
+    
+    /**
+     * Request POST_NOTIFICATIONS permission on Android 13+ (Tiramisu).
+     * Required for the Bluetooth foreground service notification.
+     * Bluetooth permissions (CONNECT/SCAN) are requested in BtSettingsActivity.
+     */
+    private void requestNotificationPermission() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            if (checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS)
+                    != PackageManager.PERMISSION_GRANTED) {
+                Logger.d(TAG, "Requesting POST_NOTIFICATIONS permission");
+                requestPermissions(new String[]{Manifest.permission.POST_NOTIFICATIONS}, 1001);
+            }
+        }
     }
 
     /**
