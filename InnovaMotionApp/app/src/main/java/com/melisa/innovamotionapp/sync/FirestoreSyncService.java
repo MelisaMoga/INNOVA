@@ -1600,6 +1600,16 @@ public class FirestoreSyncService {
      */
     public void clearLocalData(@Nullable Runnable onComplete) {
         Log.i(TAG, "Clearing all local data" + (onComplete != null ? " (with callback)" : ""));
+        
+        // Guard against shutdown executor (race condition during sign-out)
+        if (executorService.isShutdown()) {
+            Log.w(TAG, "Executor is shut down, skipping async clearLocalData");
+            if (onComplete != null) {
+                new android.os.Handler(android.os.Looper.getMainLooper()).post(onComplete);
+            }
+            return;
+        }
+        
         executorService.execute(() -> {
             int deletedRows = dao.clearAllData();
             // Also clear monitored persons to prevent stale names on user switch

@@ -146,11 +146,18 @@ public abstract class BaseActivity extends AppCompatActivity {
         Logger.userAction(TAG, "Sign out requested");
         
         try {
-            // Stop all mirrors and clear data before signing out
-            com.melisa.innovamotionapp.sync.FirestoreSyncService.getInstance(this).stopAllMirrors();
-            com.melisa.innovamotionapp.sync.FirestoreSyncService.getInstance(this).clearLocalData();
+            // Disconnect Bluetooth device and stop the service
+            if (globalData != null && globalData.deviceCommunicationManager != null) {
+                globalData.deviceCommunicationManager.disconnectDevice();
+                globalData.deviceCommunicationManager.stopService();
+                Logger.d(TAG, "Bluetooth service stopped");
+            }
             
-            // Sign out from Firebase
+            // Note: stopAllMirrors() and clearLocalData() are handled by SessionGate
+            // when Firebase auth state changes - no need to call them here to avoid
+            // race conditions with executor shutdown.
+            
+            // Sign out from Firebase (triggers SessionGate.handleUserSignedOut)
             FirebaseAuth.getInstance().signOut();
             
             // Clear any global data using the new reset method

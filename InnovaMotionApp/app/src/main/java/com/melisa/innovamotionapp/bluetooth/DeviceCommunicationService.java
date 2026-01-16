@@ -311,13 +311,9 @@ public class DeviceCommunicationService extends Service {
 
         isBatchSavingRunning = false; // Signal the batch-saving thread to stop
         
-        // Clean up sync service and user session
-        if (firestoreSyncService != null) {
-            firestoreSyncService.cleanup();
-        }
-        if (userSession != null) {
-            userSession.cleanup();
-        }
+        // Note: Do NOT cleanup firestoreSyncService or userSession here - they are shared
+        // singletons that should outlive this service. Cleanup happens during app termination
+        // or is handled by SessionGate when Firebase auth state changes.
     }
 
     /**
