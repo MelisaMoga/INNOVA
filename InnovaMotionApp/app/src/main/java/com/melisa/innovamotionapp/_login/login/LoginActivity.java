@@ -410,36 +410,7 @@ public class LoginActivity extends AppCompatActivity {
                     if (document.exists()) {
                         String role = document.getString("role");
                         Log.d(TAG, "User found with role: " + (role != null ? role : "none"));
-                        
-                        // If user already has a confirmed role, skip role selection
-                        if (role != null && !role.isEmpty()) {
-                            Log.d(TAG, "User has confirmed role, navigating directly to dashboard");
-                            // Reload session and navigate
-                            SessionGate.getInstance(this).reloadSessionAndBootstrap(
-                                new SessionGate.SessionReadyCallback() {
-                                    @Override
-                                    public void onSessionReady(String userId, String confirmedRole, List<String> supervisedUserIds) {
-                                        runOnUiThread(() -> {
-                                            hideLoading();
-                                            navigateBasedOnRole(confirmedRole);
-                                        });
-                                    }
-                                    
-                                    @Override
-                                    public void onSessionError(String error) {
-                                        Log.e(TAG, "Session reload failed: " + error);
-                                        runOnUiThread(() -> {
-                                            hideLoading();
-                                            // Fallback: use role from Firestore
-                                            navigateBasedOnRole(role);
-                                        });
-                                    }
-                                }
-                            );
-                        } else {
-                            // No role yet - show role selection
-                            showRoleSelectionUI(user);
-                        }
+                        showRoleSelectionUI(user);
                     } else {
                         Log.d(TAG, "User not found in Firestore - creating profile");
                         createUserProfile(user);

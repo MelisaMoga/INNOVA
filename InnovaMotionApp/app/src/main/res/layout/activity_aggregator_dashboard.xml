@@ -25,10 +25,10 @@
             android:layout_height="wrap_content"
             app:tabMode="fixed"
             app:tabGravity="fill"
-            app:tabIconTint="?attr/colorOnPrimary"
-            app:tabTextColor="?attr/colorOnPrimary"
-            app:tabSelectedTextColor="?attr/colorOnPrimary"
-            app:tabIndicatorColor="?attr/colorOnPrimary" />
+            app:tabIconTint="?attr/colorOnSecondaryContainer"
+            app:tabTextColor="?attr/colorOnSecondaryContainer"
+            app:tabSelectedTextColor="?attr/colorOnSecondaryContainer"
+            app:tabIndicatorColor="?attr/colorOnSecondaryContainer" />
 
     </com.google.android.material.appbar.AppBarLayout>
 
