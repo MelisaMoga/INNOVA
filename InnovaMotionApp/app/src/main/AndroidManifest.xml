@@ -76,7 +76,7 @@
         <activity
             android:name=".activities.StatisticsActivity"/>
         <activity
-            android:name=".activities.BtConnectedActivity"
+            android:name=".activities.PersonDetailActivity"
             android:windowSoftInputMode="adjustNothing"/>
         <activity
             android:name=".activities.BtSettingsActivity"

@@ -58,8 +58,8 @@ public class BtSettingsActivity extends BaseActivity {
             public void onSessionReady(String userId, String role, List<String> supervisedUserIds) {
                 runOnUiThread(() -> {
                     if ("supervisor".equals(role)) {
-                        Logger.d(TAG, "Supervisor detected in BtSettingsActivity: redirecting to BtConnectedActivity");
-                        Intent intent = new Intent(BtSettingsActivity.this, BtConnectedActivity.class);
+                        Logger.d(TAG, "Supervisor detected in BtSettingsActivity: redirecting to PersonDetailActivity");
+                        Intent intent = new Intent(BtSettingsActivity.this, PersonDetailActivity.class);
                         intent.setFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_SINGLE_TOP);
                         startActivity(intent);
                         finish();
@@ -131,7 +131,7 @@ public class BtSettingsActivity extends BaseActivity {
                 Logger.bluetooth(TAG, deviceConnected, "Device connected successfully");
 
                 // Navigate to the next screen or update UI
-                launchBtConnectedActivity();
+                launchPersonDetailActivity();
             } else {
                 // Handle the disconnected state if necessary
                 Logger.d(TAG, "Service is disconnected");
@@ -250,9 +250,9 @@ public class BtSettingsActivity extends BaseActivity {
 
 
 
-    private void launchBtConnectedActivity() {
-        Logger.userAction(TAG, "Launching BtConnectedActivity");
-        navigateToActivityAndFinish(BtConnectedActivity.class, null);
+    private void launchPersonDetailActivity() {
+        Logger.userAction(TAG, "Launching PersonDetailActivity");
+        navigateToActivityAndFinish(PersonDetailActivity.class, null);
     }
 
     @Override

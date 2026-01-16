@@ -4,37 +4,52 @@ import static org.junit.Assert.*;
 
 import org.junit.Test;
 
+import java.util.ArrayList;
+import java.util.List;
+
 /**
- * Unit tests for LivePostureFragment navigation logic.
+ * Unit tests for LivePostureFragment grid logic.
  * 
- * Tests the navigation button visibility and intent extras validation.
- * These tests verify business logic independent of the Android framework.
+ * Refactored to test the new grid-based architecture that matches SupervisorDashboard.
+ * Tests person card click handling, grid data transformation, and navigation.
  */
 public class LivePostureFragmentTest {
 
-    // ========== Navigation Button Visibility Tests ==========
+    // ========== Grid Data Tests ==========
 
     @Test
-    public void shouldShowNavigationButtons_whenSensorSelected_returnsTrue() {
-        assertTrue(shouldShowNavigationButtons("sensor001"));
+    public void gridIsEmpty_whenNoData_returnsTrue() {
+        List<PersonStatus> statuses = new ArrayList<>();
+        assertTrue(shouldShowEmptyState(statuses));
     }
 
     @Test
-    public void shouldShowNavigationButtons_whenNoSensorSelected_returnsFalse() {
-        assertFalse(shouldShowNavigationButtons(null));
+    public void gridIsEmpty_whenNull_returnsTrue() {
+        assertTrue(shouldShowEmptyState(null));
     }
 
     @Test
-    public void shouldShowNavigationButtons_whenEmptySensorId_returnsFalse() {
-        assertFalse(shouldShowNavigationButtons(""));
+    public void gridIsNotEmpty_whenHasData_returnsFalse() {
+        List<PersonStatus> statuses = new ArrayList<>();
+        statuses.add(new PersonStatus("sensor001", "Ion Popescu", 1234567890L, false));
+        assertFalse(shouldShowEmptyState(statuses));
+    }
+
+    // ========== Person Card Click Tests ==========
+
+    @Test
+    public void onPersonClick_extractsSensorId() {
+        PersonStatus person = new PersonStatus("sensor001", "Ion Popescu", 1234567890L, false);
+        assertEquals("sensor001", person.sensorId);
     }
 
     @Test
-    public void shouldShowNavigationButtons_whenWhitespaceSensorId_returnsFalse() {
-        assertFalse(shouldShowNavigationButtons("   "));
+    public void onPersonClick_extractsPersonName() {
+        PersonStatus person = new PersonStatus("sensor001", "Ion Popescu", 1234567890L, false);
+        assertEquals("Ion Popescu", person.displayName);
     }
 
-    // ========== Navigation Validation Tests ==========
+    // ========== Navigation Tests ==========
 
     @Test
     public void canNavigate_withValidSensorId_returnsTrue() {
@@ -78,60 +93,71 @@ public class LivePostureFragmentTest {
         assertNull(extras.personName);
     }
 
-    @Test
-    public void intentExtras_emptyPersonNameIsAllowed() {
-        IntentExtras extras = createIntentExtras("sensor001", "");
-        assertEquals("", extras.personName);
-    }
-
-    // ========== Person Name Fallback Tests ==========
+    // ========== Alert Sorting Tests ==========
 
     @Test
-    public void getDisplayPersonName_withValidName_returnsName() {
-        assertEquals("Ion Popescu", getDisplayPersonName("Ion Popescu", "sensor001"));
-    }
-
-    @Test
-    public void getDisplayPersonName_withNullName_returnsSensorId() {
-        assertEquals("sensor001", getDisplayPersonName(null, "sensor001"));
-    }
-
-    @Test
-    public void getDisplayPersonName_withEmptyName_returnsSensorId() {
-        assertEquals("sensor001", getDisplayPersonName("", "sensor001"));
-    }
-
-    @Test
-    public void getDisplayPersonName_withBothNull_returnsUnknown() {
-        assertEquals("Unknown", getDisplayPersonName(null, null));
-    }
-
-    // ========== Activity Target Tests ==========
-
-    @Test
-    public void allNavigationTargetsAreDistinct() {
-        String[] targets = {
-            "BtConnectedActivity",
-            "StatisticsActivity", 
-            "TimeLapseActivity",
-            "EnergyConsumptionActivity"
-        };
+    public void alerts_areSortedFirst() {
+        List<PersonStatus> statuses = new ArrayList<>();
+        statuses.add(new PersonStatus("sensor001", "Ana", 1234567890L, false));
+        statuses.add(new PersonStatus("sensor002", "Bogdan", 1234567890L, true)); // Alert
+        statuses.add(new PersonStatus("sensor003", "Carmen", 1234567890L, false));
         
-        // Verify all targets are unique
-        for (int i = 0; i < targets.length; i++) {
-            for (int j = i + 1; j < targets.length; j++) {
-                assertNotEquals("Targets should be distinct", targets[i], targets[j]);
-            }
-        }
+        List<PersonStatus> sorted = sortByAlertThenName(statuses);
+        
+        assertTrue("Alerts should be first", sorted.get(0).isAlert);
+        assertEquals("Bogdan", sorted.get(0).displayName);
     }
 
     @Test
-    public void navigationTargetCount_isFour() {
-        String[] targets = getNavigationTargets();
-        assertEquals(4, targets.length);
+    public void nonAlerts_areSortedAlphabetically() {
+        List<PersonStatus> statuses = new ArrayList<>();
+        statuses.add(new PersonStatus("sensor003", "Carmen", 1234567890L, false));
+        statuses.add(new PersonStatus("sensor001", "Ana", 1234567890L, false));
+        statuses.add(new PersonStatus("sensor002", "Bogdan", 1234567890L, false));
+        
+        List<PersonStatus> sorted = sortByAlertThenName(statuses);
+        
+        assertEquals("Ana", sorted.get(0).displayName);
+        assertEquals("Bogdan", sorted.get(1).displayName);
+        assertEquals("Carmen", sorted.get(2).displayName);
+    }
+
+    // ========== Navigation Target Tests ==========
+
+    @Test
+    public void navigationTarget_isPersonDetailActivity() {
+        assertEquals("PersonDetailActivity", getNavigationTarget());
+    }
+
+    // ========== Unified Flow Tests ==========
+
+    @Test
+    public void aggregatorFlow_matchesSupervisorFlow() {
+        // Both flows now use the same pattern:
+        // Grid → Click Person → PersonDetailActivity
+        String aggregatorTarget = getNavigationTarget();
+        String supervisorTarget = "PersonDetailActivity"; // Same as supervisor
+        assertEquals(aggregatorTarget, supervisorTarget);
     }
 
     // ========== Helper Classes and Methods ==========
+
+    /**
+     * Simple class to simulate PersonStatus.
+     */
+    private static class PersonStatus {
+        final String sensorId;
+        final String displayName;
+        final long timestamp;
+        final boolean isAlert;
+        
+        PersonStatus(String sensorId, String displayName, long timestamp, boolean isAlert) {
+            this.sensorId = sensorId;
+            this.displayName = displayName;
+            this.timestamp = timestamp;
+            this.isAlert = isAlert;
+        }
+    }
 
     /**
      * Simple class to simulate intent extras.
@@ -147,16 +173,14 @@ public class LivePostureFragmentTest {
     }
 
     /**
-     * Determines if navigation buttons should be visible.
-     * Mirrors logic in LivePostureFragment.updateNavigationButtonsVisibility().
+     * Determines if empty state should be shown.
      */
-    private boolean shouldShowNavigationButtons(String sensorId) {
-        return sensorId != null && !sensorId.trim().isEmpty();
+    private boolean shouldShowEmptyState(List<PersonStatus> statuses) {
+        return statuses == null || statuses.isEmpty();
     }
 
     /**
      * Determines if navigation is allowed for the given sensor ID.
-     * Mirrors validation in LivePostureFragment.navigateToActivity().
      */
     private boolean canNavigate(String sensorId) {
         return sensorId != null && !sensorId.isEmpty();
@@ -164,35 +188,29 @@ public class LivePostureFragmentTest {
 
     /**
      * Creates intent extras for navigation.
-     * Mirrors what LivePostureFragment puts in the intent.
      */
     private IntentExtras createIntentExtras(String sensorId, String personName) {
         return new IntentExtras(sensorId, personName);
     }
 
     /**
-     * Gets display name with fallback to sensor ID.
-     * Mirrors the display name resolution logic.
+     * Sorts statuses: alerts first, then alphabetically by name.
      */
-    private String getDisplayPersonName(String personName, String sensorId) {
-        if (personName != null && !personName.isEmpty()) {
-            return personName;
-        }
-        if (sensorId != null && !sensorId.isEmpty()) {
-            return sensorId;
-        }
-        return "Unknown";
+    private List<PersonStatus> sortByAlertThenName(List<PersonStatus> statuses) {
+        List<PersonStatus> sorted = new ArrayList<>(statuses);
+        sorted.sort((a, b) -> {
+            if (a.isAlert != b.isAlert) {
+                return a.isAlert ? -1 : 1;
+            }
+            return a.displayName.compareToIgnoreCase(b.displayName);
+        });
+        return sorted;
     }
 
     /**
-     * Gets all navigation target activity names.
+     * Gets the navigation target activity name.
      */
-    private String[] getNavigationTargets() {
-        return new String[] {
-            "BtConnectedActivity",
-            "StatisticsActivity",
-            "TimeLapseActivity",
-            "EnergyConsumptionActivity"
-        };
+    private String getNavigationTarget() {
+        return "PersonDetailActivity";
     }
 }

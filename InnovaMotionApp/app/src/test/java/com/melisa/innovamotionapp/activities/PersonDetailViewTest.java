@@ -68,15 +68,17 @@ public class PersonDetailViewTest {
     }
 
     @Test
-    public void shouldUseSensorMode_withSensorIdButNotSupervisor_returnsFalse() {
-        // Non-supervisors should not use sensor mode even if sensorId is provided
-        assertFalse(shouldUseSensorMode("sensor001", false));
+    public void shouldUseSensorMode_withSensorIdAndAggregator_returnsTrue() {
+        // FIX: Aggregators now ALSO support sensor mode (role-agnostic)
+        assertTrue(shouldUseSensorMode("sensor001", false));
     }
 
     @Test
     public void shouldUseSensorMode_withoutSensorId_returnsFalse() {
         assertFalse(shouldUseSensorMode(null, true));
         assertFalse(shouldUseSensorMode("", true));
+        assertFalse(shouldUseSensorMode(null, false));
+        assertFalse(shouldUseSensorMode("", false));
     }
 
     // ========== Display Name Selection Tests ==========
@@ -110,8 +112,8 @@ public class PersonDetailViewTest {
     @Test
     public void extraKeys_areConsistentAcrossActivities() {
         // All activities should use the same extra keys
-        String btConnectedSensorKey = BtConnectedActivity.EXTRA_SENSOR_ID;
-        String btConnectedNameKey = BtConnectedActivity.EXTRA_PERSON_NAME;
+        String personDetailSensorKey = PersonDetailActivity.EXTRA_SENSOR_ID;
+        String personDetailNameKey = PersonDetailActivity.EXTRA_PERSON_NAME;
         
         String statisticsSensorKey = StatisticsActivity.EXTRA_SENSOR_ID;
         String statisticsNameKey = StatisticsActivity.EXTRA_PERSON_NAME;
@@ -123,12 +125,12 @@ public class PersonDetailViewTest {
         String timelapseNameKey = TimeLapseActivity.EXTRA_PERSON_NAME;
         
         // All sensor ID keys should match
-        assertEquals(btConnectedSensorKey, statisticsSensorKey);
+        assertEquals(personDetailSensorKey, statisticsSensorKey);
         assertEquals(statisticsSensorKey, energySensorKey);
         assertEquals(energySensorKey, timelapseSensorKey);
         
         // All person name keys should match
-        assertEquals(btConnectedNameKey, statisticsNameKey);
+        assertEquals(personDetailNameKey, statisticsNameKey);
         assertEquals(statisticsNameKey, energyNameKey);
         assertEquals(energyNameKey, timelapseNameKey);
     }
@@ -144,7 +146,8 @@ public class PersonDetailViewTest {
     }
 
     private boolean shouldUseSensorMode(String sensorId, boolean isSupervisor) {
-        return isValidSensorId(sensorId) && isSupervisor;
+        // FIX: Role-agnostic - both Aggregator and Supervisor can use sensor mode
+        return isValidSensorId(sensorId);
     }
 
     private String getDisplayName(String personName, String fallbackName) {

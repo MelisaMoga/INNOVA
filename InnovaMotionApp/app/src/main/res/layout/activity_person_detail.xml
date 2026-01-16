@@ -5,14 +5,14 @@
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:padding="16dp"
-    tools:context=".activities.BtConnectedActivity">
+    tools:context=".activities.PersonDetailActivity">
 
     <TextView
         android:id="@+id/descriptionTextView"
         android:layout_width="0dp"
         android:layout_height="wrap_content"
         android:gravity="center"
-        android:text="Mihaita sta pe scaun"
+        android:text="@string/unknown_person"
         android:textSize="18sp"
         android:textStyle="bold"
         android:padding="8dp"
@@ -33,7 +33,7 @@
             android:id="@+id/riskLabelTextView"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="risc"
+            android:text="@string/risk_level"
             android:textSize="16sp"
             app:layout_constraintStart_toStartOf="parent"
             app:layout_constraintTop_toTopOf="parent"
@@ -48,7 +48,7 @@
             android:background="#CCFFCC"
             android:gravity="center"
             android:padding="4dp"
-            android:text="minim"
+            android:text="-"
             android:textSize="16sp"
             app:layout_constraintStart_toEndOf="@id/riskLabelTextView"
             app:layout_constraintEnd_toEndOf="parent"

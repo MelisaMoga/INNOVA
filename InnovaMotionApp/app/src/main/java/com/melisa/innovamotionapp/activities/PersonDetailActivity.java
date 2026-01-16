@@ -1,6 +1,5 @@
 package com.melisa.innovamotionapp.activities;
 
-import android.bluetooth.BluetoothAdapter;
 import android.content.Intent;
 import android.os.Bundle;
 import android.widget.Toast;
@@ -14,7 +13,7 @@ import com.melisa.innovamotionapp.data.posture.Posture;
 import com.melisa.innovamotionapp.data.posture.PostureFactory;
 import com.melisa.innovamotionapp.data.posture.types.UnknownPosture;
 import com.melisa.innovamotionapp.data.posture.types.UnusedFootwearPosture;
-import com.melisa.innovamotionapp.databinding.BtConnectedActivityBinding;
+import com.melisa.innovamotionapp.databinding.ActivityPersonDetailBinding;
 import com.melisa.innovamotionapp.ui.viewmodels.SupervisorFeedViewModel;
 import com.melisa.innovamotionapp.utils.GlobalData;
 import com.melisa.innovamotionapp.utils.Logger;
@@ -24,21 +23,24 @@ import com.melisa.innovamotionapp.utils.RoleProvider;
 /**
  * Activity for displaying posture data for a single person.
  * 
+ * This is the unified detail view used by both Aggregator and Supervisor roles.
+ * Both roles read from the local Room database - the difference is how data gets there:
+ * - Aggregator: Bluetooth → Room
+ * - Supervisor: Firestore → Sync → Room
+ * 
  * Supports two modes:
- * 1. Legacy mode: Shows data from GlobalData (Bluetooth connection)
- * 2. Sensor-specific mode: Shows data for a specific sensorId (Supervisor viewing from dashboard)
+ * 1. Sensor-specific mode: Shows data for a specific sensorId (primary mode for both roles)
+ * 2. Legacy mode: Shows data from GlobalData (Bluetooth connection, fallback for aggregator)
  */
-public class BtConnectedActivity extends AppCompatActivity {
+public class PersonDetailActivity extends AppCompatActivity {
     
-    private static final String TAG = "BtConnectedActivity";
+    private static final String TAG = "PersonDetailActivity";
     
     // Intent extras for sensor-specific viewing
     public static final String EXTRA_SENSOR_ID = "extra_sensor_id";
     public static final String EXTRA_PERSON_NAME = "extra_person_name";
     
-    private static final int REQUEST_ENABLE_BT = 1;
-    private BluetoothAdapter mBluetoothAdapter;
-    private BtConnectedActivityBinding binding;
+    private ActivityPersonDetailBinding binding;
     private final GlobalData globalData = GlobalData.getInstance();
     private SupervisorFeedViewModel supervisorFeedViewModel;
     private boolean isFirstPosture = true;
@@ -51,10 +53,10 @@ public class BtConnectedActivity extends AppCompatActivity {
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
-        binding = BtConnectedActivityBinding.inflate(getLayoutInflater());
+        binding = ActivityPersonDetailBinding.inflate(getLayoutInflater());
         setContentView(binding.getRoot());
 
-        Logger.d(TAG, "BtConnectedActivity created");
+        Logger.d(TAG, "PersonDetailActivity created");
 
         // Extract intent extras
         sensorId = getIntent().getStringExtra(EXTRA_SENSOR_ID);
@@ -64,7 +66,7 @@ public class BtConnectedActivity extends AppCompatActivity {
         
         // Set initial title/name
         if (personName != null && !personName.isEmpty()) {
-            // Supervisor viewing specific person - show their name
+            // Viewing specific person - show their name
             binding.descriptionTextView.setText(personName);
         } else {
             // Legacy behavior - use global userName
@@ -75,9 +77,10 @@ public class BtConnectedActivity extends AppCompatActivity {
         setupNavigationButtons();
 
         // Choose observation mode based on whether sensorId is provided
-        if (sensorId != null && !sensorId.isEmpty() && RoleProvider.isSupervisor()) {
-            // Supervisor viewing a specific person from dashboard
-            Logger.d(TAG, "Supervisor viewing specific person: sensorId=" + sensorId + ", name=" + personName);
+        // FIX: Removed RoleProvider.isSupervisor() check - both roles can use sensor-specific mode
+        if (sensorId != null && !sensorId.isEmpty()) {
+            // Viewing a specific person from dashboard (both Aggregator and Supervisor)
+            Logger.d(TAG, "Viewing specific person: sensorId=" + sensorId + ", name=" + personName);
             observeSensorSpecificData();
         } else {
             // Legacy behavior: GlobalData observer for Bluetooth connection
@@ -87,19 +90,19 @@ public class BtConnectedActivity extends AppCompatActivity {
         // Modified connection observer: supervisors don't need to exit on disconnect
         GlobalData.getInstance().getIsConnectedDevice().observe(this, isConnected -> {
             if (!isConnected && RoleProvider.getCurrentRole() != RoleProvider.Role.SUPERVISOR) {
-                // Exit this activity only for supervised users when device connection is terminated
+                // Exit this activity only for aggregators when device connection is terminated
                 // Supervisors stay in the activity to continue monitoring Room data
                 Logger.d(TAG, "Device disconnected, finishing activity");
                 finish();
             }
         });
         
-        Logger.i(TAG, "BtConnectedActivity initialized");
+        Logger.i(TAG, "PersonDetailActivity initialized");
     }
 
     /**
      * Observe sensor-specific data from Room database.
-     * Used when supervisor views a specific person from the dashboard.
+     * Used when viewing a specific person from the dashboard (both roles).
      */
     private void observeSensorSpecificData() {
         ReceivedBtDataDao dao = InnovaDatabase.getInstance(this).receivedBtDataDao();
@@ -236,5 +239,4 @@ public class BtConnectedActivity extends AppCompatActivity {
         intent.putExtra(EXTRA_PERSON_NAME, personName);
         startActivity(intent);
     }
-
 }

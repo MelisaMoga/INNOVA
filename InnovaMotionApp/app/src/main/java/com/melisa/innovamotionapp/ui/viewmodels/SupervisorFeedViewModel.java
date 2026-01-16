@@ -21,7 +21,7 @@ import java.util.List;
 /**
  * ViewModel for supervisor feed functionality.
  * Converts the latest database row to Posture and pushes it into GlobalData
- * so that BtConnectedActivity can observe it without changes.
+ * so that PersonDetailActivity can observe it without changes.
  */
 public class SupervisorFeedViewModel extends AndroidViewModel {
     private final ReceivedBtDataDao dao;
@@ -34,7 +34,7 @@ public class SupervisorFeedViewModel extends AndroidViewModel {
 
     /**
      * Live posture derived from the latest DB row for supervised users.
-     * Also updates GlobalData so BtConnectedActivity stays unchanged.
+     * Also updates GlobalData so PersonDetailActivity stays unchanged.
      * 
      * @return LiveData<Posture> that emits the latest posture from Room database
      */
@@ -54,7 +54,7 @@ public class SupervisorFeedViewModel extends AndroidViewModel {
                 // Convert the latest database entity to a Posture
                 Posture posture = PostureFactory.createPosture(entity.getReceivedMsg());
                 
-                // Update GlobalData so existing observers (like BtConnectedActivity) 
+                // Update GlobalData so existing observers (like PersonDetailActivity) 
                 // continue to work without any changes
                 global.setReceivedPosture(posture);
                 
@@ -73,7 +73,7 @@ public class SupervisorFeedViewModel extends AndroidViewModel {
             // Convert the latest database entity to a Posture
             Posture posture = PostureFactory.createPosture(entity.getReceivedMsg());
             
-            // Update GlobalData so existing observers (like BtConnectedActivity) 
+            // Update GlobalData so existing observers (like PersonDetailActivity) 
             // continue to work without any changes
             global.setReceivedPosture(posture);
             

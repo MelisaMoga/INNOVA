@@ -30,7 +30,7 @@ import com.melisa.innovamotionapp.utils.Logger;
  * - Color-coded status: green (active), yellow (stale), red (alert)
  * - Swipe-to-refresh
  * - Empty state when no persons
- * - Tap to view detail (navigates to BtConnectedActivity)
+ * - Tap to view detail (navigates to PersonDetailActivity)
  */
 public class SupervisorDashboardActivity extends BaseActivity {
 
@@ -120,8 +120,8 @@ public class SupervisorDashboardActivity extends BaseActivity {
     private void onPersonClick(PersonStatus person) {
         Logger.userAction(TAG, "Clicked on person: " + person.getDisplayName());
 
-        // Navigate to BtConnectedActivity with person info
-        Intent intent = new Intent(this, BtConnectedActivity.class);
+        // Navigate to PersonDetailActivity with person info
+        Intent intent = new Intent(this, PersonDetailActivity.class);
         intent.putExtra(EXTRA_SENSOR_ID, person.getSensorId());
         intent.putExtra(EXTRA_PERSON_NAME, person.getDisplayName());
         startActivity(intent);

@@ -5,146 +5,155 @@ import android.app.Application;
 import androidx.annotation.NonNull;
 import androidx.lifecycle.AndroidViewModel;
 import androidx.lifecycle.LiveData;
+import androidx.lifecycle.MediatorLiveData;
 import androidx.lifecycle.MutableLiveData;
-import androidx.lifecycle.Transformations;
 
 import com.melisa.innovamotionapp.data.database.InnovaDatabase;
 import com.melisa.innovamotionapp.data.database.MonitoredPerson;
-import com.melisa.innovamotionapp.data.database.MonitoredPersonDao;
 import com.melisa.innovamotionapp.data.database.ReceivedBtDataDao;
 import com.melisa.innovamotionapp.data.database.ReceivedBtDataEntity;
 import com.melisa.innovamotionapp.data.posture.Posture;
 import com.melisa.innovamotionapp.data.posture.PostureFactory;
+import com.melisa.innovamotionapp.data.posture.types.FallingPosture;
+import com.melisa.innovamotionapp.ui.models.PersonStatus;
 import com.melisa.innovamotionapp.utils.PersonNameManager;
 
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 /**
- * ViewModel for the Live Posture Viewer tab.
+ * ViewModel for the Aggregator's Live Posture tab.
  * 
- * Allows selecting a monitored person and observing their current posture
- * in real-time as new data arrives from Bluetooth.
+ * Refactored to show a grid of all monitored sensors (matching Supervisor Dashboard)
+ * instead of a single-person view.
+ * 
+ * Both Supervisor and Aggregator dashboards now share the same pattern:
+ * - Display all monitored persons in a grid
+ * - Click to navigate to PersonDetailActivity
+ * - Real-time updates from Room database
  */
 public class LivePostureViewModel extends AndroidViewModel {
 
     private final ReceivedBtDataDao dao;
-    private final MonitoredPersonDao personDao;
     private final PersonNameManager personNameManager;
-
-    // Selected person's sensor ID
-    private final MutableLiveData<String> selectedSensorId = new MutableLiveData<>();
-
-    // Derived LiveData
-    private final LiveData<Posture> currentPosture;
-    private final LiveData<Long> lastUpdateTime;
-    private final LiveData<String> selectedPersonName;
-    private final LiveData<List<MonitoredPerson>> availablePersons;
-    private final LiveData<ReceivedBtDataEntity> latestReading;
+    private final MutableLiveData<Boolean> isLoading = new MutableLiveData<>(false);
+    private final MediatorLiveData<List<PersonStatus>> personStatuses;
+    
+    // In-memory cache for name lookups (avoids main-thread DB access)
+    private final Map<String, String> nameCache = new HashMap<>();
+    
+    // Raw data source cache
+    private List<ReceivedBtDataEntity> latestEntities = null;
 
     public LivePostureViewModel(@NonNull Application application) {
         super(application);
 
-        InnovaDatabase db = InnovaDatabase.getInstance(application);
-        dao = db.receivedBtDataDao();
-        personDao = db.monitoredPersonDao();
+        dao = InnovaDatabase.getInstance(application).receivedBtDataDao();
         personNameManager = PersonNameManager.getInstance(application);
+        personStatuses = new MediatorLiveData<>();
 
-        // Available persons for dropdown
-        availablePersons = personDao.getAllMonitoredPersons();
+        // Get latest reading for each sensor (reactive from Room)
+        LiveData<List<ReceivedBtDataEntity>> latestPerSensor = dao.getLatestForEachSensor();
         
-        // #region agent log
-        // H4: Log available persons count
-        availablePersons.observeForever(persons -> {
-            int count = persons != null ? persons.size() : 0;
-            android.util.Log.w("DBG_H4", "availablePersons LiveData update: personsCount=" + count);
-        });
-        // #endregion
+        // Observe person names to update the cache
+        LiveData<List<MonitoredPerson>> allPersons = personNameManager.getAllPersonsLive();
 
-        // Latest reading for selected sensor (reactive)
-        latestReading = Transformations.switchMap(selectedSensorId, sensorId -> {
-            if (sensorId == null || sensorId.isEmpty()) {
-                return new MutableLiveData<>(null);
+        // Add source: entity data
+        personStatuses.addSource(latestPerSensor, entities -> {
+            latestEntities = entities;
+            transformToPersonStatuses();
+        });
+
+        // Add source: person names (update cache and re-transform)
+        personStatuses.addSource(allPersons, persons -> {
+            updateNameCache(persons);
+            transformToPersonStatuses();
+        });
+    }
+
+    /**
+     * Update the in-memory name cache from the person list.
+     */
+    private void updateNameCache(List<MonitoredPerson> persons) {
+        nameCache.clear();
+        if (persons != null) {
+            for (MonitoredPerson person : persons) {
+                nameCache.put(person.getSensorId(), person.getDisplayName());
             }
-            return dao.getLatestForSensor(sensorId);
-        });
+        }
+    }
 
-        // Transform reading to Posture
-        currentPosture = Transformations.map(latestReading, entity -> {
-            if (entity == null) return null;
-            return PostureFactory.createPosture(entity.getReceivedMsg());
-        });
+    /**
+     * Get display name from cache, falling back to sensorId if not found.
+     */
+    private String getDisplayNameFromCache(String sensorId) {
+        return nameCache.getOrDefault(sensorId, sensorId);
+    }
 
-        // Extract timestamp from latest reading
-        lastUpdateTime = Transformations.map(latestReading, entity -> {
-            if (entity == null) return null;
-            return entity.getTimestamp();
-        });
+    /**
+     * Transform raw entities into PersonStatus list using cached names.
+     */
+    private void transformToPersonStatuses() {
+        if (latestEntities == null) {
+            personStatuses.setValue(Collections.emptyList());
+            return;
+        }
+        
+        List<PersonStatus> statuses = new ArrayList<>();
+        for (ReceivedBtDataEntity entity : latestEntities) {
+            String sensorId = entity.getSensorId();
+            if (sensorId == null || sensorId.isEmpty()) continue;
 
-        // Selected person's display name (reactive to selection changes)
-        selectedPersonName = Transformations.switchMap(selectedSensorId, sensorId -> {
-            if (sensorId == null || sensorId.isEmpty()) {
-                return new MutableLiveData<>("");
+            String displayName = getDisplayNameFromCache(sensorId);
+            Posture posture = PostureFactory.createPosture(entity.getReceivedMsg());
+            boolean isAlert = posture instanceof FallingPosture;
+
+            statuses.add(new PersonStatus(
+                    sensorId,
+                    displayName,
+                    posture,
+                    entity.getTimestamp(),
+                    isAlert
+            ));
+        }
+
+        // Sort: alerts first, then by name alphabetically
+        Collections.sort(statuses, (a, b) -> {
+            if (a.isAlert() != b.isAlert()) {
+                return a.isAlert() ? -1 : 1;
             }
-            // Use LiveData from PersonNameManager for reactive updates
-            return personNameManager.getPersonBySensorIdLive(sensorId) != null
-                    ? Transformations.map(personNameManager.getPersonBySensorIdLive(sensorId), person -> {
-                        if (person == null) return sensorId;
-                        return person.getDisplayName();
-                    })
-                    : new MutableLiveData<>(sensorId);
+            return a.getDisplayName().compareToIgnoreCase(b.getDisplayName());
         });
+
+        personStatuses.setValue(statuses);
     }
 
     /**
-     * Select a person to view their posture.
-     * 
-     * @param sensorId The sensor ID of the person to select, or null to clear selection
+     * Get all person statuses as LiveData.
+     * Updates automatically when new sensor data arrives.
      */
-    public void selectPerson(String sensorId) {
-        selectedSensorId.setValue(sensorId);
+    public LiveData<List<PersonStatus>> getPersonStatuses() {
+        return personStatuses;
     }
 
     /**
-     * Get the currently selected sensor ID.
+     * Get loading state for UI progress indicator.
      */
-    public String getSelectedSensorId() {
-        return selectedSensorId.getValue();
+    public LiveData<Boolean> getIsLoading() {
+        return isLoading;
     }
 
     /**
-     * Get the list of all monitored persons for the dropdown.
+     * Trigger a manual refresh of data.
+     * This can be used with swipe-to-refresh.
      */
-    public LiveData<List<MonitoredPerson>> getAvailablePersons() {
-        return availablePersons;
-    }
-
-    /**
-     * Get the current posture of the selected person.
-     * Updates automatically when new data arrives.
-     */
-    public LiveData<Posture> getCurrentPosture() {
-        return currentPosture;
-    }
-
-    /**
-     * Get the timestamp of the last reading for the selected person.
-     */
-    public LiveData<Long> getLastUpdateTime() {
-        return lastUpdateTime;
-    }
-
-    /**
-     * Get the display name of the selected person.
-     */
-    public LiveData<String> getSelectedPersonName() {
-        return selectedPersonName;
-    }
-
-    /**
-     * Check if a person is currently selected.
-     */
-    public boolean hasSelection() {
-        String sensorId = selectedSensorId.getValue();
-        return sensorId != null && !sensorId.isEmpty();
+    public void refreshData() {
+        isLoading.setValue(true);
+        // The LiveData from Room will automatically update when data changes.
+        // For now, just reset the loading state after a short delay.
+        isLoading.postValue(false);
     }
 }
