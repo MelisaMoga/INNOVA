@@ -38,35 +38,11 @@
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintEnd_toEndOf="parent">
 
-        <LinearLayout
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:orientation="horizontal"
-            android:gravity="center_vertical"
-            android:layout_marginBottom="16dp">
-
-            <TextView
-                android:id="@+id/textView2"
-                android:layout_width="0dp"
-                android:layout_height="wrap_content"
-                android:layout_weight="1"
-                android:text="Numele copilului:"
-                android:textSize="18sp" />
-
-            <EditText
-                android:id="@+id/inputChildName"
-                android:layout_width="0dp"
-                android:layout_height="wrap_content"
-                android:layout_weight="1"
-                android:hint="Popescu Mihaita"
-                android:inputType="textPersonName" />
-        </LinearLayout>
-
         <Button
             android:id="@+id/btConnection"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:enabled="false"
+            android:enabled="true"
             android:text="Conectare"
             android:layout_gravity="center_horizontal"
             android:layout_marginBottom="16dp" />

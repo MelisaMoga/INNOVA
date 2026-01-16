@@ -129,8 +129,7 @@ public class BtSettingsViewModel extends ViewModel {
         String lastDeviceAddress = GlobalData.getInstance().userDeviceSettingsStorage.getLatestDeviceAddress();
         // Try to reconnect to it, if is the same address as last one
         if (device.getAddress().equals(lastDeviceAddress)) {
-            String userName = globalData.userDeviceSettingsStorage.getLatestUser();
-            connectToDevice(device, userName);
+            connectToDevice(device);
         } else {
             globalData.nearbyBtDevices.add(device);
             nearbyDevices.setValue(new ArrayList<>(globalData.nearbyBtDevices));
@@ -145,10 +144,8 @@ public class BtSettingsViewModel extends ViewModel {
     }
 
     @SuppressLint("MissingPermission")
-    public void connectToDevice(BluetoothDevice device, String userName) {
+    public void connectToDevice(BluetoothDevice device) {
         isConnecting = true;
-        globalData.userName = userName;
-        GlobalData.getInstance().userDeviceSettingsStorage.saveLatestUser(userName);
 
         uiState.setValue(BtSettingsState.CONNECTING);
         // Cancel discovery because it otherwise slows down the connection.

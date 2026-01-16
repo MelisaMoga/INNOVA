@@ -15,30 +15,20 @@ import android.location.LocationManager;
 import android.os.Build;
 import android.os.Bundle;
 import android.provider.Settings;
-import android.text.Editable;
-import android.text.TextWatcher;
-import android.util.Log;
 import android.view.View;
-import android.widget.Toast;
 
 import androidx.activity.result.ActivityResult;
 import androidx.activity.result.ActivityResultLauncher;
 import androidx.activity.result.contract.ActivityResultContracts;
-import androidx.annotation.NonNull;
-import androidx.annotation.RequiresApi;
 import androidx.annotation.Nullable;
 import androidx.lifecycle.ViewModelProvider;
 
 import com.google.android.material.button.MaterialButton;
 import com.melisa.innovamotionapp.R;
 import com.melisa.innovamotionapp.databinding.BtSettingsActivityBinding;
-import com.melisa.innovamotionapp.sync.SessionGate;
 import com.melisa.innovamotionapp.ui.adapters.NearbyDeviceDataAdapter;
 import com.melisa.innovamotionapp.ui.viewmodels.BtSettingsViewModel;
 import com.melisa.innovamotionapp.utils.Logger;
-import com.melisa.innovamotionapp.utils.RoleProvider;
-
-import java.util.List;
 
 public class BtSettingsActivity extends BaseActivity {
 
@@ -52,35 +42,6 @@ public class BtSettingsActivity extends BaseActivity {
 
     @Override
     protected void onBaseCreate(@Nullable Bundle savedInstanceState) {
-        // Early exit for supervisors: they shouldn't need to scan
-        SessionGate.getInstance(this).waitForSessionReady(new SessionGate.SessionReadyCallback() {
-            @Override
-            public void onSessionReady(String userId, String role, List<String> supervisedUserIds) {
-                runOnUiThread(() -> {
-                    if ("supervisor".equals(role)) {
-                        Logger.d(TAG, "Supervisor detected in BtSettingsActivity: redirecting to PersonDetailActivity");
-                        Intent intent = new Intent(BtSettingsActivity.this, PersonDetailActivity.class);
-                        intent.setFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_SINGLE_TOP);
-                        startActivity(intent);
-                        finish();
-                        return;
-                    }
-                    
-                    // Continue with normal supervised user flow
-                    initializeSupervisedUserUI();
-                });
-            }
-            
-            @Override
-            public void onSessionError(String error) {
-                Logger.e(TAG, "Session not ready: " + error);
-                // Continue with normal flow if session not ready
-                initializeSupervisedUserUI();
-            }
-        });
-    }
-    
-    private void initializeSupervisedUserUI() {
         binding = BtSettingsActivityBinding.inflate(getLayoutInflater());
         setContentView(binding.getRoot());
 
@@ -107,9 +68,6 @@ public class BtSettingsActivity extends BaseActivity {
 
         // Observe nearby devices
         viewModel.getNearbyDevices().observe(this, devices -> {
-            String userName = binding.inputChildName.getText().toString();
-
-
             // Display nearby devices
             NearbyDeviceDataAdapter adapter = new NearbyDeviceDataAdapter(
                     this,
@@ -117,21 +75,20 @@ public class BtSettingsActivity extends BaseActivity {
                     devices
             );
             adapter.setOnDeviceClickListener(device -> {
-                viewModel.connectToDevice(device, userName);
+                viewModel.connectToDevice(device);
             });
             binding.deviceListRecyclerView.setAdapter(adapter);
         });
 
         globalData.getIsConnectedDevice().observe(this, isConnected -> {
-
             if (isConnected) {
                 String deviceConnected = globalData.deviceCommunicationManager.getDeviceToConnect().getAddress();
                 globalData.userDeviceSettingsStorage.saveLatestDeviceAddress(deviceConnected);
                 
                 Logger.bluetooth(TAG, deviceConnected, "Device connected successfully");
 
-                // Navigate to the next screen or update UI
-                launchPersonDetailActivity();
+                // Update UI to show connected status
+                logAndToast("Connected to device");
             } else {
                 // Handle the disconnected state if necessary
                 Logger.d(TAG, "Service is disconnected");
@@ -141,27 +98,6 @@ public class BtSettingsActivity extends BaseActivity {
 
 
     private void setupUIListeners() {
-        // UserName text input logic
-        binding.inputChildName.addTextChangedListener(new TextWatcher() {
-            @Override
-            public void beforeTextChanged(CharSequence s, int start, int count, int after) {
-                // Not needed
-            }
-
-            @Override
-            public void onTextChanged(CharSequence s, int start, int before, int count) {
-                // Get the trimmed version of the input
-                String trimmedInput = s.toString().trim();
-                // Enable the button if the trimmed input is at least 3 characters
-                binding.btConnection.setEnabled(trimmedInput.length() >= 3);
-            }
-
-            @Override
-            public void afterTextChanged(Editable s) {
-                // Not needed
-            }
-        });
-
         // Button click logic
         binding.btConnection.setOnClickListener(this::onStartBtnClicked);
     }
@@ -169,13 +105,10 @@ public class BtSettingsActivity extends BaseActivity {
     private void updateUI(BtSettingsState state) {
         switch (state) {
             case BEFORE_BTN_PRESSED: // On activity initialisation
-                binding.inputChildName.setEnabled(true);
-                binding.btConnection.setEnabled(false);
-                binding.inputChildName.setText(globalData.userDeviceSettingsStorage.getLatestUser());
+                binding.btConnection.setEnabled(true);
                 break;
 
             case AFTER_BTN_PRESSED:
-                binding.inputChildName.setEnabled(false);
                 binding.btConnection.setEnabled(false);
                 break;
 
@@ -247,13 +180,6 @@ public class BtSettingsActivity extends BaseActivity {
         return false;
     }
 
-
-
-
-    private void launchPersonDetailActivity() {
-        Logger.userAction(TAG, "Launching PersonDetailActivity");
-        navigateToActivityAndFinish(PersonDetailActivity.class, null);
-    }
 
     @Override
     protected void onResume() {
