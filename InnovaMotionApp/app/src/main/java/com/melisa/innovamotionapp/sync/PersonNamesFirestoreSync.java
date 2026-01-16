@@ -32,7 +32,12 @@ import java.util.concurrent.Executors;
  *   - sensorId: String
  *   - displayName: String
  *   - updatedAt: Long
+ * 
+ * @deprecated Use {@link SensorInventoryService} instead. 
+ * This class uses a subcollection structure that is being phased out
+ * in favor of a root-level 'sensors' collection.
  */
+@Deprecated
 public class PersonNamesFirestoreSync {
     private static final String TAG = "PersonNamesSync";
     private static final String COLLECTION_MONITORED_PERSONS = "monitored_persons";

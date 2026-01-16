@@ -107,7 +107,7 @@ public class TimeLapseActivity extends AppCompatActivity {
             } else {
                 UserSession.getInstance(getApplicationContext()).loadUserSession(new UserSession.SessionLoadCallback() {
                     @Override
-                    public void onSessionLoaded(String uid, String role, java.util.List<String> kids) {
+                    public void onSessionLoaded(String uid, java.util.List<String> roles) {
                         String target = TargetUserResolver.resolveTargetUserId(getApplicationContext());
                         Logger.i(TAG, "Resolved targetUserId=" + target);
                         viewModel.setTargetUserId(target);

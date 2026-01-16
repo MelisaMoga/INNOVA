@@ -30,8 +30,8 @@ public class PersonNamesViewModel extends AndroidViewModel {
     private final SensorAssignmentService assignmentService;
     private final LiveData<List<MonitoredPerson>> allPersons;
     
-    // Map of sensorId -> supervisorEmail for UI binding
-    private final MutableLiveData<Map<String, String>> sensorSupervisorMap;
+    // Map of sensorId -> list of supervisor emails for UI binding (new schema: multiple supervisors per sensor)
+    private final MutableLiveData<Map<String, List<String>>> sensorSupervisorMap;
 
     /**
      * Callback interface for assignment operations.
@@ -62,9 +62,9 @@ public class PersonNamesViewModel extends AndroidViewModel {
 
     /**
      * Get the supervisor assignment map.
-     * Maps sensorId -> supervisorEmail.
+     * Maps sensorId -> list of supervisor emails.
      */
-    public LiveData<Map<String, String>> getSensorSupervisorMap() {
+    public LiveData<Map<String, List<String>>> getSensorSupervisorMap() {
         return sensorSupervisorMap;
     }
 
@@ -104,13 +104,13 @@ public class PersonNamesViewModel extends AndroidViewModel {
     }
 
     /**
-     * Unassign a supervisor from a sensor.
+     * Unassign all supervisors from a sensor.
      * 
      * @param sensorId The sensor ID to unassign
      * @param callback Result callback
      */
-    public void unassignSupervisor(@NonNull String sensorId, @NonNull AssignmentResultCallback callback) {
-        assignmentService.unassignSupervisor(sensorId, new SensorAssignmentService.AssignmentCallback() {
+    public void unassignAllFromSensor(@NonNull String sensorId, @NonNull AssignmentResultCallback callback) {
+        assignmentService.unassignAllFromSensor(sensorId, new SensorAssignmentService.AssignmentCallback() {
             @Override
             public void onSuccess() {
                 // Remove from local map
@@ -126,18 +126,54 @@ public class PersonNamesViewModel extends AndroidViewModel {
     }
 
     /**
-     * Get the supervisor email for a specific sensor.
+     * Unassign a specific supervisor from a sensor.
+     * 
+     * @param sensorId The sensor ID to unassign
+     * @param supervisorUid The supervisor UID to unassign
+     * @param callback Result callback
+     */
+    public void unassignSupervisor(@NonNull String sensorId, @NonNull String supervisorUid, 
+                                    @NonNull AssignmentResultCallback callback) {
+        assignmentService.unassignSupervisor(sensorId, supervisorUid, new SensorAssignmentService.AssignmentCallback() {
+            @Override
+            public void onSuccess() {
+                // Refresh the map to update supervisor list for this sensor
+                loadAssignmentMap();
+                callback.onSuccess();
+            }
+
+            @Override
+            public void onError(String error) {
+                callback.onError(error);
+            }
+        });
+    }
+
+    /**
+     * Get the supervisor emails for a specific sensor.
      * 
      * @param sensorId The sensor ID to look up
-     * @return The supervisor email, or null if not assigned
+     * @return List of supervisor emails, or null if none assigned
      */
     @Nullable
-    public String getSupervisorForSensor(@NonNull String sensorId) {
-        Map<String, String> map = sensorSupervisorMap.getValue();
+    public List<String> getSupervisorsForSensor(@NonNull String sensorId) {
+        Map<String, List<String>> map = sensorSupervisorMap.getValue();
         if (map != null) {
             return map.get(sensorId);
         }
         return null;
+    }
+
+    /**
+     * Get the first supervisor email for a specific sensor (convenience method).
+     * 
+     * @param sensorId The sensor ID to look up
+     * @return The first supervisor email, or null if not assigned
+     */
+    @Nullable
+    public String getFirstSupervisorForSensor(@NonNull String sensorId) {
+        List<String> supervisors = getSupervisorsForSensor(sensorId);
+        return (supervisors != null && !supervisors.isEmpty()) ? supervisors.get(0) : null;
     }
 
     /**
@@ -153,7 +189,7 @@ public class PersonNamesViewModel extends AndroidViewModel {
     private void loadAssignmentMap() {
         assignmentService.getAssignmentMap(new SensorAssignmentService.AssignmentMapCallback() {
             @Override
-            public void onResult(Map<String, String> map) {
+            public void onResult(Map<String, List<String>> map) {
                 sensorSupervisorMap.postValue(map);
             }
 
@@ -165,24 +201,35 @@ public class PersonNamesViewModel extends AndroidViewModel {
     }
 
     /**
-     * Update a single entry in the map.
+     * Update a single entry in the map by adding a supervisor.
      */
     private void updateMapEntry(String sensorId, String supervisorEmail) {
-        Map<String, String> currentMap = sensorSupervisorMap.getValue();
+        Map<String, List<String>> currentMap = sensorSupervisorMap.getValue();
         if (currentMap == null) {
             currentMap = new HashMap<>();
         } else {
             currentMap = new HashMap<>(currentMap); // Create mutable copy
         }
-        currentMap.put(sensorId, supervisorEmail);
+        
+        List<String> supervisors = currentMap.get(sensorId);
+        if (supervisors == null) {
+            supervisors = new java.util.ArrayList<>();
+        } else {
+            supervisors = new java.util.ArrayList<>(supervisors); // Create mutable copy
+        }
+        
+        if (!supervisors.contains(supervisorEmail)) {
+            supervisors.add(supervisorEmail);
+        }
+        currentMap.put(sensorId, supervisors);
         sensorSupervisorMap.postValue(currentMap);
     }
 
     /**
-     * Remove a single entry from the map.
+     * Remove a sensor entry from the map.
      */
     private void removeMapEntry(String sensorId) {
-        Map<String, String> currentMap = sensorSupervisorMap.getValue();
+        Map<String, List<String>> currentMap = sensorSupervisorMap.getValue();
         if (currentMap != null && currentMap.containsKey(sensorId)) {
             currentMap = new HashMap<>(currentMap); // Create mutable copy
             currentMap.remove(sensorId);

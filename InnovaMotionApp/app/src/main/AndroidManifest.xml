@@ -66,6 +66,10 @@
             android:exported="false"
             android:label="@string/supervisor_dashboard" />
         <activity
+            android:name=".activities.RoleSelectionActivity"
+            android:exported="false"
+            android:label="@string/role_selection_title" />
+        <activity
             android:name=".activities.EnergyConsumptionActivity"/>
         <activity
             android:name=".activities.TimeLapseActivity"/>

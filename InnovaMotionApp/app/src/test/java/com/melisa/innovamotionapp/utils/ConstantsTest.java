@@ -96,8 +96,50 @@ public class ConstantsTest {
         assertNotNull(Constants.FIRESTORE_COLLECTION_USERS);
         assertFalse(Constants.FIRESTORE_COLLECTION_USERS.isEmpty());
         
+        assertNotNull(Constants.FIRESTORE_COLLECTION_SENSORS);
+        assertFalse(Constants.FIRESTORE_COLLECTION_SENSORS.isEmpty());
+        
+        assertNotNull(Constants.FIRESTORE_COLLECTION_ASSIGNMENTS);
+        assertFalse(Constants.FIRESTORE_COLLECTION_ASSIGNMENTS.isEmpty());
+    }
+
+    // ========== NEW Collection Constants Tests ==========
+
+    @Test
+    public void testNewCollectionConstants_sensors() {
+        // NEW: sensors collection for sensor inventory
+        assertEquals("sensors", Constants.FIRESTORE_COLLECTION_SENSORS);
+    }
+
+    @Test
+    public void testNewCollectionConstants_assignments() {
+        // NEW: assignments collection for supervisor-sensor links
+        assertEquals("assignments", Constants.FIRESTORE_COLLECTION_ASSIGNMENTS);
+    }
+
+    @Test
+    public void testDeprecatedCollectionConstants_stillExist() {
+        // Deprecated constants should still exist for backward compatibility
         assertNotNull(Constants.FIRESTORE_COLLECTION_PERSON_NAMES);
-        assertFalse(Constants.FIRESTORE_COLLECTION_PERSON_NAMES.isEmpty());
+        assertNotNull(Constants.FIRESTORE_COLLECTION_SENSOR_ASSIGNMENTS);
+    }
+
+    @Test
+    public void testCollectionNames_areDistinct() {
+        // All collection names should be unique
+        String[] collections = {
+                Constants.FIRESTORE_COLLECTION_BT_DATA,
+                Constants.FIRESTORE_COLLECTION_USERS,
+                Constants.FIRESTORE_COLLECTION_SENSORS,
+                Constants.FIRESTORE_COLLECTION_ASSIGNMENTS
+        };
+        
+        for (int i = 0; i < collections.length; i++) {
+            for (int j = i + 1; j < collections.length; j++) {
+                assertNotEquals("Collection names should be unique: " + collections[i] + " vs " + collections[j],
+                        collections[i], collections[j]);
+            }
+        }
     }
 
     // ========== UI Constants Tests ==========

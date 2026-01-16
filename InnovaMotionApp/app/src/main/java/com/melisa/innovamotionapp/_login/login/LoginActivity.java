@@ -42,12 +42,16 @@ import com.google.firebase.auth.FirebaseAuth;
 import com.google.firebase.auth.FirebaseUser;
 import com.google.firebase.auth.GoogleAuthProvider;
 import com.google.firebase.firestore.DocumentReference;
+import com.google.firebase.firestore.FieldValue;
 import com.google.firebase.firestore.FirebaseFirestore;
 import com.melisa.innovamotionapp.R;
 import com.melisa.innovamotionapp.activities.AggregatorMenuActivity;
+import com.melisa.innovamotionapp.activities.RoleSelectionActivity;
 import com.melisa.innovamotionapp.activities.SupervisorDashboardActivity;
+import com.melisa.innovamotionapp.data.models.UserProfile;
 import com.melisa.innovamotionapp.sync.FirestoreSyncService;
 import com.melisa.innovamotionapp.sync.SessionGate;
+import com.melisa.innovamotionapp.utils.Constants;
 
 import java.util.HashMap;
 import java.util.Map;
@@ -408,9 +412,31 @@ public class LoginActivity extends AppCompatActivity {
         userRef.get()
                 .addOnSuccessListener(document -> {
                     if (document.exists()) {
-                        String role = document.getString("role");
-                        Log.d(TAG, "User found with role: " + (role != null ? role : "none"));
-                        showRoleSelectionUI(user);
+                        // Parse user profile with new roles array support
+                        UserProfile profile = UserProfile.fromDocument(document);
+                        List<String> roles = profile != null ? profile.getRoles() : new ArrayList<>();
+                        
+                        Log.d(TAG, "User found with roles: " + roles);
+                        
+                        // Check if user has confirmed roles
+                        if (!roles.isEmpty()) {
+                            // Always show role selection - let user choose their context each login
+                            Log.d(TAG, "User has roles: " + roles + ", showing RoleSelectionActivity");
+                            hideLoading();
+                            navigateToRoleSelection();
+                        } else {
+                            // No roles yet - check legacy 'role' field
+                            String legacyRole = document.getString("role");
+                            if (legacyRole != null && !legacyRole.isEmpty()) {
+                                // User has legacy role - also show role selection
+                                Log.d(TAG, "Found legacy role field: " + legacyRole + ", showing RoleSelectionActivity");
+                                hideLoading();
+                                navigateToRoleSelection();
+                            } else {
+                                // No role yet - show initial role selection UI
+                                showRoleSelectionUI(user);
+                            }
+                        }
                     } else {
                         Log.d(TAG, "User not found in Firestore - creating profile");
                         createUserProfile(user);
@@ -420,6 +446,16 @@ public class LoginActivity extends AppCompatActivity {
                     Log.e(TAG, "Error checking user in Firestore", e);
                     handleFirestoreError(e);
                 });
+    }
+    
+    /**
+     * Navigate to RoleSelectionActivity for users with both roles.
+     */
+    private void navigateToRoleSelection() {
+        Intent intent = new Intent(this, RoleSelectionActivity.class);
+        intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TASK);
+        startActivity(intent);
+        finish();
     }
 
     private void fetchAndPreFillUserPreferences(FirebaseUser user) {
@@ -510,6 +546,7 @@ public class LoginActivity extends AppCompatActivity {
         userData.put("displayName", user.getDisplayName());
         userData.put("email", user.getEmail());
         userData.put("photoUrl", user.getPhotoUrl() != null ? user.getPhotoUrl().toString() : null);
+        userData.put("roles", new ArrayList<>()); // Empty roles array - will be set after role selection
         userData.put("createdAt", System.currentTimeMillis());
         userData.put("lastSignIn", System.currentTimeMillis());
 
@@ -578,8 +615,11 @@ public class LoginActivity extends AppCompatActivity {
         Log.d(TAG, "Saving role '" + role + "' for user: " + user.getUid() + 
                (aggregatorEmail != null ? ", aggregator email: " + aggregatorEmail : ""));
 
+        // Use arrayUnion to ADD the role without removing existing ones
+        // This allows a user to accumulate multiple roles (aggregator + supervisor)
         Map<String, Object> updates = new HashMap<>();
-        updates.put("role", role);
+        updates.put("roles", FieldValue.arrayUnion(role)); // MERGE role, don't replace
+        updates.put("role", FieldValue.delete()); // Remove legacy 'role' field to reduce redundancy
         updates.put("lastSelectedRole", role); // Save for future pre-filling
         updates.put("lastSignIn", System.currentTimeMillis());
         if (aggregatorEmail != null && !aggregatorEmail.isEmpty()) {

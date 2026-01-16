@@ -140,7 +140,7 @@ public class FirestoreSyncService {
             Log.d(TAG, "User session not loaded yet, loading...");
             userSession.loadUserSession(new UserSession.SessionLoadCallback() {
                 @Override
-                public void onSessionLoaded(String userId, String role, List<String> supervisedUserIds) {
+                public void onSessionLoaded(String userId, List<String> roles) {
                     handleConnectivityRestored();
                 }
 
@@ -176,15 +176,27 @@ public class FirestoreSyncService {
                 }
             });
         } else if (userSession.isSupervisor()) {
-            Log.i(TAG, "Supervisor user: starting download sync");
-            List<String> supervisedSensorIds = userSession.getSupervisedSensorIds();
-            // #region agent log
-            // H2: Log supervisor sync initiation
-            android.util.Log.w("DBG_H2", "Supervisor sync check: supervisedSensorIds=" + supervisedSensorIds + ", isEmpty=" + supervisedSensorIds.isEmpty());
-            // #endregion
-            if (!supervisedSensorIds.isEmpty()) {
-                startSupervisorMirrors(supervisedSensorIds);
-            }
+            Log.i(TAG, "Supervisor user: fetching assigned sensors and starting download sync");
+            
+            // Dynamically fetch assigned sensor IDs from the 'assignments' collection
+            userSession.fetchAssignedSensorIds(new UserSession.AssignedSensorsCallback() {
+                @Override
+                public void onSensorsLoaded(List<String> sensorIds) {
+                    // #region agent log
+                    android.util.Log.w("DBG_H2", "Supervisor sync: fetched sensorIds=" + sensorIds + ", isEmpty=" + sensorIds.isEmpty());
+                    // #endregion
+                    if (!sensorIds.isEmpty()) {
+                        startSupervisorMirrors(sensorIds);
+                    } else {
+                        Log.w(TAG, "No sensors assigned to this supervisor");
+                    }
+                }
+
+                @Override
+                public void onError(String error) {
+                    Log.e(TAG, "Failed to fetch assigned sensors: " + error);
+                }
+            });
         }
     }
 
@@ -550,7 +562,7 @@ public class FirestoreSyncService {
 
         // Query Firestore to check which documents already exist
         firestore.collection(COLLECTION_BT_DATA)
-                .whereEqualTo("userId", userId)
+                .whereEqualTo("uploadedBy", userId)
                 .get()
                 .addOnSuccessListener(queryDocumentSnapshots -> {
                     // Find documents that don't exist in Firestore
@@ -643,17 +655,25 @@ public class FirestoreSyncService {
             return;
         }
 
-        List<String> supervisedSensorIds = userSession.getSupervisedSensorIds();
-        if (supervisedSensorIds.isEmpty()) {
-            Log.w(TAG, "No supervised sensors found, cannot start supervisor sync");
-            return;
-        }
+        // Dynamically fetch assigned sensor IDs
+        userSession.fetchAssignedSensorIds(new UserSession.AssignedSensorsCallback() {
+            @Override
+            public void onSensorsLoaded(List<String> sensorIds) {
+                if (sensorIds.isEmpty()) {
+                    Log.w(TAG, "No sensors assigned, cannot start supervisor sync");
+                    return;
+                }
 
-        Log.i(TAG, "Starting supervisor sync for " + supervisedSensorIds.size() + " supervised sensors");
-        isSupervisorSyncActive = true;
+                Log.i(TAG, "Starting supervisor sync for " + sensorIds.size() + " sensors");
+                isSupervisorSyncActive = true;
+                startSupervisorMirrors(sensorIds);
+            }
 
-        // Start mirrors for each supervised sensor
-        startSupervisorMirrors(supervisedSensorIds);
+            @Override
+            public void onError(String error) {
+                Log.e(TAG, "Failed to fetch assigned sensors: " + error);
+            }
+        });
     }
 
     /**
@@ -675,15 +695,23 @@ public class FirestoreSyncService {
             return;
         }
 
-        executorService.execute(() -> {
-            List<String> supervisedSensorIds = userSession.getSupervisedSensorIds();
-            if (supervisedSensorIds.isEmpty()) {
-                callback.onSuccess("No supervised sensors to sync");
-                return;
+        // Dynamically fetch assigned sensor IDs from the 'assignments' collection
+        userSession.fetchAssignedSensorIds(new UserSession.AssignedSensorsCallback() {
+            @Override
+            public void onSensorsLoaded(List<String> sensorIds) {
+                if (sensorIds.isEmpty()) {
+                    callback.onSuccess("No sensors assigned to sync");
+                    return;
+                }
+
+                // For manual sync, do a one-time fetch for all assigned sensors
+                syncFromSupervisedSensors(sensorIds, callback);
             }
 
-            // For manual sync, do a one-time fetch for all supervised sensors
-            syncFromSupervisedSensors(supervisedSensorIds, callback);
+            @Override
+            public void onError(String error) {
+                callback.onError("Failed to fetch assigned sensors: " + error);
+            }
         });
     }
 
@@ -887,7 +915,7 @@ public class FirestoreSyncService {
                 
                 // Query Firestore for messages newer than local max timestamp
                 firestore.collection(COLLECTION_BT_DATA)
-                        .whereEqualTo("userId", userId)
+                        .whereEqualTo("uploadedBy", userId)
                         .orderBy("timestamp", Query.Direction.ASCENDING)
                         .whereGreaterThan("timestamp", localMaxTimestamp)
                         .get()
@@ -1010,7 +1038,7 @@ public class FirestoreSyncService {
         final int PAGE_SIZE = Constants.FIRESTORE_PAGE_SIZE;
         
         Query query = firestore.collection(COLLECTION_BT_DATA)
-                .whereEqualTo("userId", userId)
+                .whereEqualTo("uploadedBy", userId)
                 .orderBy("timestamp", Query.Direction.ASCENDING)
                 .whereGreaterThan("timestamp", localMaxTimestamp)
                 .limit(PAGE_SIZE);
@@ -1258,7 +1286,7 @@ public class FirestoreSyncService {
                 
                 // Query Firestore for messages newer than local max timestamp
                 firestore.collection(COLLECTION_BT_DATA)
-                        .whereEqualTo("userId", supervisedUserId)
+                        .whereEqualTo("uploadedBy", supervisedUserId)
                         .orderBy("timestamp", Query.Direction.ASCENDING)
                         .whereGreaterThan("timestamp", localMaxTimestamp)
                         .get()
@@ -1770,7 +1798,7 @@ public class FirestoreSyncService {
 
         // 1) Firestore one-shot count
         firestore.collection(COLLECTION_BT_DATA)
-            .whereEqualTo("userId", childUid)
+            .whereEqualTo("uploadedBy", childUid)
             .get()
             .addOnSuccessListener(snap -> {
                 int cloud = snap.size();

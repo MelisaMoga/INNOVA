@@ -15,6 +15,7 @@ import com.melisa.innovamotionapp.data.database.MonitoredPerson;
 import com.melisa.innovamotionapp.databinding.ItemPersonNameBinding;
 
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 
 /**
@@ -25,7 +26,7 @@ import java.util.Map;
 public class PersonNamesAdapter extends ListAdapter<MonitoredPerson, PersonNamesAdapter.ViewHolder> {
 
     private final OnItemClickListener clickListener;
-    private Map<String, String> supervisorMap = new HashMap<>();
+    private Map<String, List<String>> supervisorMap = new HashMap<>();
 
     /**
      * Callback interface for item click events.
@@ -40,10 +41,10 @@ public class PersonNamesAdapter extends ListAdapter<MonitoredPerson, PersonNames
     }
 
     /**
-     * Set the supervisor map (sensorId -> supervisorEmail).
+     * Set the supervisor map (sensorId -> list of supervisor emails).
      * This triggers a rebind of all items.
      */
-    public void setSupervisorMap(@Nullable Map<String, String> map) {
+    public void setSupervisorMap(@Nullable Map<String, List<String>> map) {
         this.supervisorMap = map != null ? map : new HashMap<>();
         notifyDataSetChanged();
     }
@@ -59,8 +60,11 @@ public class PersonNamesAdapter extends ListAdapter<MonitoredPerson, PersonNames
     @Override
     public void onBindViewHolder(@NonNull ViewHolder holder, int position) {
         MonitoredPerson person = getItem(position);
-        String supervisorEmail = supervisorMap.get(person.getSensorId());
-        holder.bind(person, supervisorEmail, clickListener);
+        List<String> supervisorEmails = supervisorMap.get(person.getSensorId());
+        // Get first supervisor for display (UI simplification)
+        String firstSupervisor = (supervisorEmails != null && !supervisorEmails.isEmpty()) 
+                ? supervisorEmails.get(0) : null;
+        holder.bind(person, firstSupervisor, clickListener);
     }
 
     static class ViewHolder extends RecyclerView.ViewHolder {

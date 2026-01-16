@@ -159,6 +159,9 @@
     <string name="manage_person_names">Manage Names</string>
     <string name="no_monitored_persons">No monitored persons</string>
 
+    <!-- Role Selection -->
+    <string name="role_selection_title">Select Mode</string>
+
     <!-- Supervisor Dashboard -->
     <string name="supervisor_dashboard">Supervisor Dashboard</string>
     <string name="no_monitored_persons_supervisor">No persons being monitored.\nWaiting for data from aggregators.</string>

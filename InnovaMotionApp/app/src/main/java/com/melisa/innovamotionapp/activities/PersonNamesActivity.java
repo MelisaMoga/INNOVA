@@ -84,7 +84,7 @@ public class PersonNamesActivity extends BaseActivity {
      * Show dialog to edit sensor settings (name and supervisor).
      */
     private void showSettingsDialog(MonitoredPerson person) {
-        String supervisorEmail = viewModel.getSupervisorForSensor(person.getSensorId());
+        String supervisorEmail = viewModel.getFirstSupervisorForSensor(person.getSensorId());
         
         SensorSettingsDialog dialog = SensorSettingsDialog.newInstance(
                 person.getSensorId(),
@@ -118,7 +118,7 @@ public class PersonNamesActivity extends BaseActivity {
         });
         
         dialog.setOnUnassignListener(sensorId -> {
-            viewModel.unassignSupervisor(sensorId, new PersonNamesViewModel.AssignmentResultCallback() {
+            viewModel.unassignAllFromSensor(sensorId, new PersonNamesViewModel.AssignmentResultCallback() {
                 @Override
                 public void onSuccess() {
                     showToast(getString(R.string.supervisor_unassigned_success));

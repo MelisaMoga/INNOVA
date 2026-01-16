@@ -149,8 +149,7 @@ public class SyncActivity extends AppCompatActivity implements SyncManager.SyncP
     private void showUserInfo() {
         if (userSession.isLoaded()) {
             String userInfo = "User ID: " + userSession.getCurrentUserId() + "\n" +
-                             "Role: " + userSession.getRole() + "\n" +
-                             "Supervised Sensor IDs: " + userSession.getSupervisedSensorIds().toString();
+                             "Roles: " + userSession.getRoles().toString();
             
             if (txtUserInfo != null) {
                 txtUserInfo.setText(userInfo);
@@ -166,7 +165,7 @@ public class SyncActivity extends AppCompatActivity implements SyncManager.SyncP
             // Try to reload session
             userSession.loadUserSession(new UserSession.SessionLoadCallback() {
                 @Override
-                public void onSessionLoaded(String userId, String role, List<String> supervisedUserIds) {
+                public void onSessionLoaded(String userId, List<String> roles) {
                     runOnUiThread(() -> showUserInfo());
                 }
 

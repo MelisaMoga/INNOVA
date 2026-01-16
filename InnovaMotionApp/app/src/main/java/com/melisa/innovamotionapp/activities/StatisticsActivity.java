@@ -109,7 +109,7 @@ public class StatisticsActivity extends AppCompatActivity {
             } else {
                 UserSession.getInstance(getApplicationContext()).loadUserSession(new UserSession.SessionLoadCallback() {
                     @Override
-                    public void onSessionLoaded(String userId, String role, java.util.List<String> supervisedUserIds) {
+                    public void onSessionLoaded(String userId, java.util.List<String> roles) {
                         String target = TargetUserResolver.resolveTargetUserId(getApplicationContext());
                         viewModel.setTargetUserId(target);
                     }

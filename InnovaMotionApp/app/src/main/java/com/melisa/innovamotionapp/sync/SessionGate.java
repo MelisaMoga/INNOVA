@@ -9,9 +9,8 @@ import com.google.firebase.auth.FirebaseAuth;
 import com.google.firebase.auth.FirebaseUser;
 import com.melisa.innovamotionapp.utils.GlobalData;
 
+import java.util.ArrayList;
 import java.util.List;
-
-import com.melisa.innovamotionapp.sync.PersonNamesFirestoreSync;
 
 /**
  * SessionGate manages the authentication and session loading flow.
@@ -25,14 +24,14 @@ public class SessionGate {
     private final FirebaseAuth auth;
     private final UserSession userSession;
     private final FirestoreSyncService syncService;
-    private final PersonNamesFirestoreSync personNamesSync;
+    private final SensorInventoryService sensorInventoryService;
     
     // Session state
     private boolean isSessionReady = false;
     private boolean hasBootstrapped = false; // Track if bootstrap has run
     private String currentUserUid;
-    private String currentUserRole;
-    private List<String> supervisedUserIds;
+    private List<String> currentUserRoles;
+    private List<String> supervisedSensorIds;
     
     // Callback interface for session ready
     public interface SessionReadyCallback {
@@ -45,7 +44,9 @@ public class SessionGate {
         this.auth = FirebaseAuth.getInstance();
         this.userSession = UserSession.getInstance(context);
         this.syncService = FirestoreSyncService.getInstance(context);
-        this.personNamesSync = PersonNamesFirestoreSync.getInstance(context);
+        this.sensorInventoryService = SensorInventoryService.getInstance(context);
+        this.currentUserRoles = new ArrayList<>();
+        this.supervisedSensorIds = new ArrayList<>();
         
         // Set up auth state listener
         setupAuthStateListener();
@@ -78,20 +79,29 @@ public class SessionGate {
     /**
      * Update cached session data and GlobalData instance
      * @param userId User ID
-     * @param role User role (supervised or supervisor)
-     * @param supervisedUserIds List of supervised user IDs (empty for supervised users)
+     * @param roles User roles list
      */
-    private void updateSessionCache(String userId, String role, List<String> supervisedUserIds) {
+    private void updateSessionCache(String userId, List<String> roles) {
         // Cache session data locally
         this.currentUserUid = userId;
-        this.currentUserRole = role;
-        this.supervisedUserIds = supervisedUserIds;
+        this.currentUserRoles = roles != null ? new ArrayList<>(roles) : new ArrayList<>();
         this.isSessionReady = true;
         
         // Update GlobalData singleton with session info
         GlobalData.getInstance().setCurrentUserUid(userId);
-        GlobalData.getInstance().setCurrentUserRole(role);
-        GlobalData.getInstance().setSupervisedSensorIds(supervisedUserIds);
+        
+        // Preserve existing role if explicitly set (e.g., by RoleSelectionActivity)
+        // Only set default role if GlobalData.currentUserRole is null or empty
+        String existingRole = GlobalData.getInstance().currentUserRole;
+        if (existingRole == null || existingRole.isEmpty()) {
+            // No role explicitly set - default to first role in list for backward compatibility
+            String primaryRole = !this.currentUserRoles.isEmpty() ? this.currentUserRoles.get(0) : null;
+            GlobalData.getInstance().setCurrentUserRole(primaryRole);
+            Log.d(TAG, "Set default role from profile: " + primaryRole);
+        } else {
+            // Role was explicitly set (user selected in RoleSelectionActivity) - preserve it
+            Log.d(TAG, "Preserving explicitly selected role: " + existingRole);
+        }
     }
     
     /**
@@ -103,19 +113,12 @@ public class SessionGate {
         
         userSession.loadUserSession(new UserSession.SessionLoadCallback() {
             @Override
-            public void onSessionLoaded(String userId, String role, List<String> supervisedUserIds) {
-                Log.i(TAG, "Session data loaded - User: " + userId + ", Role: " + role + ", Supervised: " + supervisedUserIds);
+            public void onSessionLoaded(String userId, List<String> roles) {
+                Log.i(TAG, "Session data loaded - User: " + userId + ", Roles: " + roles);
                 Log.i(TAG, "⚠️ Bootstrap will NOT run automatically - waiting for explicit trigger");
                 
                 // Cache session data
-                updateSessionCache(userId, role, supervisedUserIds);
-                
-                // Log supervised users for supervisor role
-                if ("supervisor".equals(role)) {
-                    for (String child : supervisedUserIds) {
-                        Log.i("SESSION", "Supervisor's cached supervised user=" + child);
-                    }
-                }
+                updateSessionCache(userId, roles);
                 
                 // DO NOT run bootstrap here - wait for explicit call
             }
@@ -148,19 +151,24 @@ public class SessionGate {
         // Force reload session to get latest data from Firestore
         userSession.reloadSession(new UserSession.SessionLoadCallback() {
             @Override
-            public void onSessionLoaded(String userId, String role, List<String> supervisedUserIds) {
-                Log.i("SESSION", "✅ Session reloaded - user=" + userId + " role=" + role + " supervised=" + supervisedUserIds);
+            public void onSessionLoaded(String userId, List<String> roles) {
+                Log.i("SESSION", "✅ Session reloaded - user=" + userId + " roles=" + roles);
                 
                 // Update cached session data
-                updateSessionCache(userId, role, supervisedUserIds);
+                updateSessionCache(userId, roles);
+                
+                // Determine primary role for bootstrap
+                String primaryRole = !roles.isEmpty() ? roles.get(0) : null;
                 
                 // Now run bootstrap with correct data
-                Log.i(TAG, "🚀 Running post-auth bootstrap with confirmed role: " + role);
-                runPostAuthBootstrap(role, supervisedUserIds);
+                Log.i(TAG, "🚀 Running post-auth bootstrap with roles: " + roles);
+                runPostAuthBootstrap(roles);
                 hasBootstrapped = true;
                 
                 if (callback != null) {
-                    callback.onSessionReady(userId, role, supervisedUserIds);
+                    // Callback uses legacy signature - pass primary role and empty sensor list
+                    // Sensor IDs are now fetched dynamically
+                    callback.onSessionReady(userId, primaryRole, new ArrayList<>());
                 }
             }
             
@@ -191,25 +199,31 @@ public class SessionGate {
         isSessionReady = false;
         hasBootstrapped = false;
         currentUserUid = null;
-        currentUserRole = null;
-        supervisedUserIds = null;
+        currentUserRoles = new ArrayList<>();
+        supervisedSensorIds = new ArrayList<>();
     }
     
     /**
-     * Run post-authentication bootstrap based on user role
+     * Run post-authentication bootstrap based on user roles
      */
-    private void runPostAuthBootstrap(String role, List<String> supervisedSensorIds) {
-        Log.i(TAG, "Running post-auth bootstrap for role: " + role);
+    private void runPostAuthBootstrap(List<String> roles) {
+        Log.i(TAG, "Running post-auth bootstrap for roles: " + roles);
         // #region agent log
-        android.util.Log.w("DBG_SUP", "runPostAuthBootstrap: role=" + role + ", sensorIds=" + supervisedSensorIds);
+        android.util.Log.w("DBG_SUP", "runPostAuthBootstrap: roles=" + roles);
         // #endregion
         
-        if ("aggregator".equals(role)) {
+        // Check for aggregator role
+        if (roles.contains("aggregator")) {
             runAggregatorPipeline();
-        } else if ("supervisor".equals(role)) {
-            runSupervisorPipeline(supervisedSensorIds);
-        } else {
-            Log.w(TAG, "Unknown role: " + role);
+        }
+        
+        // Check for supervisor role
+        if (roles.contains("supervisor")) {
+            runSupervisorPipeline();
+        }
+        
+        if (roles.isEmpty()) {
+            Log.w(TAG, "No roles found for user");
         }
     }
     
@@ -231,8 +245,8 @@ public class SessionGate {
                 android.util.Log.w("DBG_SUP", "runAggregatorPipeline: backfill success - " + message);
                 // #endregion
                 
-                // Also download person names for this aggregator
-                downloadAggregatorPersonNames();
+                // Also download sensor names from the sensors collection
+                downloadAggregatorSensorNames();
             }
             
             @Override
@@ -242,8 +256,8 @@ public class SessionGate {
                 android.util.Log.w("DBG_SUP", "runAggregatorPipeline: backfill error - " + error);
                 // #endregion
                 
-                // Still try to download person names even if message backfill failed
-                downloadAggregatorPersonNames();
+                // Still try to download sensor names even if message backfill failed
+                downloadAggregatorSensorNames();
             }
             
             @Override
@@ -254,73 +268,125 @@ public class SessionGate {
     }
     
     /**
-     * Download person names for the current aggregator from Firestore.
+     * Download sensor names for the current aggregator from Firestore.
      * This ensures display names are restored after account switch.
      */
-    private void downloadAggregatorPersonNames() {
+    private void downloadAggregatorSensorNames() {
         if (currentUserUid == null) {
-            Log.w(TAG, "Cannot download person names: currentUserUid is null");
+            Log.w(TAG, "Cannot download sensor names: currentUserUid is null");
             return;
         }
         
-        Log.i(TAG, "Downloading person names for aggregator: " + currentUserUid);
-        personNamesSync.downloadNamesFromAggregator(currentUserUid, new PersonNamesFirestoreSync.SyncCallback() {
+        Log.i(TAG, "Downloading sensor names for aggregator: " + currentUserUid);
+        sensorInventoryService.getOwnedSensors(new SensorInventoryService.SensorListCallback() {
             @Override
-            public void onSuccess(String message) {
-                Log.i(TAG, "Person names downloaded: " + message);
+            public void onResult(List<com.melisa.innovamotionapp.data.models.Sensor> sensors) {
+                Log.i(TAG, "Fetched " + sensors.size() + " sensor names from Firestore");
+                
+                // Save fetched sensors to local Room database
+                if (!sensors.isEmpty()) {
+                    sensorInventoryService.saveSensorsToLocal(sensors, new SensorInventoryService.SyncCallback() {
+                        @Override
+                        public void onSuccess(String message) {
+                            Log.i(TAG, "Aggregator sensor names saved to local: " + message);
+                        }
+                        
+                        @Override
+                        public void onError(String error) {
+                            Log.w(TAG, "Failed to save aggregator sensor names locally: " + error);
+                        }
+                    });
+                }
             }
             
             @Override
             public void onError(String error) {
-                Log.w(TAG, "Failed to download person names: " + error);
+                Log.w(TAG, "Failed to download sensor names: " + error);
             }
         });
     }
     
     /**
-     * Run supervisor pipeline - sync data for supervised sensors
+     * Run supervisor pipeline - dynamically fetches assigned sensors and syncs data
      */
-    private void runSupervisorPipeline(List<String> supervisedSensorIds) {
-        Log.i(TAG, "Starting supervisor pipeline for " + supervisedSensorIds.size() + " sensors");
-        // #region agent log
-        android.util.Log.w("DBG_SUP", "runSupervisorPipeline: sensorIds=" + supervisedSensorIds);
-        // #endregion
+    private void runSupervisorPipeline() {
+        Log.i(TAG, "Starting supervisor pipeline - fetching assigned sensors");
         
-        if (supervisedSensorIds.isEmpty()) {
-            Log.w(TAG, "No supervised sensors found for supervisor - check Firestore supervisedSensorIds field");
-            // #region agent log
-            android.util.Log.e("DBG_SUP", "runSupervisorPipeline: EMPTY sensorIds! Supervisor needs supervisedSensorIds in Firestore");
-            // #endregion
-            return;
-        }
-        
-        // First, sync existing data from Firestore for these sensors
-        syncService.syncFromSupervisedSensors(supervisedSensorIds, new FirestoreSyncService.SyncCallback() {
+        // Dynamically fetch assigned sensor IDs from the 'assignments' collection
+        userSession.fetchAssignedSensorIds(new UserSession.AssignedSensorsCallback() {
             @Override
-            public void onSuccess(String message) {
-                Log.i(TAG, "Supervisor initial sync completed: " + message);
+            public void onSensorsLoaded(List<String> sensorIds) {
                 // #region agent log
-                android.util.Log.w("DBG_SUP", "runSupervisorPipeline: initial sync success - " + message);
+                android.util.Log.w("DBG_SUP", "runSupervisorPipeline: fetched sensorIds=" + sensorIds);
                 // #endregion
                 
-                // Now start real-time mirrors for ongoing updates
-                syncService.startSupervisorMirrors(supervisedSensorIds);
+                // Cache for later use
+                supervisedSensorIds = new ArrayList<>(sensorIds);
+                GlobalData.getInstance().setSupervisedSensorIds(sensorIds);
+                
+                if (sensorIds.isEmpty()) {
+                    Log.w(TAG, "No sensors assigned to supervisor");
+                    // #region agent log
+                    android.util.Log.e("DBG_SUP", "runSupervisorPipeline: EMPTY sensorIds!");
+                    // #endregion
+                    return;
+                }
+                
+                // First, sync existing data from Firestore for these sensors
+                syncService.syncFromSupervisedSensors(sensorIds, new FirestoreSyncService.SyncCallback() {
+                    @Override
+                    public void onSuccess(String message) {
+                        Log.i(TAG, "Supervisor initial sync completed: " + message);
+                        // #region agent log
+                        android.util.Log.w("DBG_SUP", "runSupervisorPipeline: initial sync success - " + message);
+                        // #endregion
+                        
+                        // Now start real-time mirrors for ongoing updates
+                        syncService.startSupervisorMirrors(sensorIds);
+                        
+                        // Also download sensor names for display
+                        downloadSupervisorSensorNames(sensorIds);
+                    }
+                    
+                    @Override
+                    public void onError(String error) {
+                        Log.w(TAG, "Supervisor initial sync failed: " + error);
+                        // #region agent log
+                        android.util.Log.e("DBG_SUP", "runSupervisorPipeline: initial sync error - " + error);
+                        // #endregion
+                        
+                        // Still try to start mirrors even if initial sync failed
+                        syncService.startSupervisorMirrors(sensorIds);
+                    }
+                    
+                    @Override
+                    public void onProgress(int current, int total) {
+                        Log.d(TAG, "Supervisor sync progress: " + current + "/" + total);
+                    }
+                });
+            }
+
+            @Override
+            public void onError(String error) {
+                Log.e(TAG, "Failed to fetch assigned sensors: " + error);
+            }
+        });
+    }
+    
+    /**
+     * Download sensor names for supervisor from sensors collection.
+     */
+    private void downloadSupervisorSensorNames(List<String> sensorIds) {
+        Log.i(TAG, "Downloading sensor names for supervisor");
+        sensorInventoryService.downloadToLocal(sensorIds, new SensorInventoryService.SyncCallback() {
+            @Override
+            public void onSuccess(String message) {
+                Log.i(TAG, "Supervisor sensor names downloaded: " + message);
             }
             
             @Override
             public void onError(String error) {
-                Log.w(TAG, "Supervisor initial sync failed: " + error);
-                // #region agent log
-                android.util.Log.e("DBG_SUP", "runSupervisorPipeline: initial sync error - " + error);
-                // #endregion
-                
-                // Still try to start mirrors even if initial sync failed
-                syncService.startSupervisorMirrors(supervisedSensorIds);
-            }
-            
-            @Override
-            public void onProgress(int current, int total) {
-                Log.d(TAG, "Supervisor sync progress: " + current + "/" + total);
+                Log.w(TAG, "Failed to download supervisor sensor names: " + error);
             }
         });
     }
@@ -347,18 +413,25 @@ public class SessionGate {
     }
     
     /**
-     * Get current user role
+     * Get current user roles.
+     */
+    public List<String> getCurrentUserRoles() {
+        return currentUserRoles != null ? new ArrayList<>(currentUserRoles) : new ArrayList<>();
+    }
+    
+    /**
+     * Get current user primary role (for backward compatibility).
      */
     public String getCurrentUserRole() {
-        return currentUserRole;
+        return !currentUserRoles.isEmpty() ? currentUserRoles.get(0) : null;
     }
     
     /**
      * Get supervised sensor IDs (for supervisor role).
-     * These are the sensor IDs that this supervisor is allowed to monitor.
+     * These are cached from the last call to runSupervisorPipeline.
      */
     public List<String> getSupervisedSensorIds() {
-        return supervisedUserIds; // Field is named for backward compat, but contains sensor IDs
+        return supervisedSensorIds != null ? new ArrayList<>(supervisedSensorIds) : new ArrayList<>();
     }
     
     /**
@@ -374,7 +447,8 @@ public class SessionGate {
      */
     public void waitForSessionReady(SessionReadyCallback callback) {
         if (isSessionReady) {
-            callback.onSessionReady(currentUserUid, currentUserRole, supervisedUserIds);
+            String primaryRole = !currentUserRoles.isEmpty() ? currentUserRoles.get(0) : null;
+            callback.onSessionReady(currentUserUid, primaryRole, supervisedSensorIds);
         } else {
             // For now, just return error - in a real implementation you might want to queue callbacks
             callback.onSessionError("Session not ready");

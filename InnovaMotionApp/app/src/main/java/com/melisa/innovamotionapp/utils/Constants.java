@@ -52,10 +52,18 @@ public final class Constants {
     /** Collection name for user profiles in Firestore */
     public static final String FIRESTORE_COLLECTION_USERS = "users";
     
-    /** Collection name for person names in Firestore */
+    /** Collection name for sensor inventory in Firestore */
+    public static final String FIRESTORE_COLLECTION_SENSORS = "sensors";
+    
+    /** Collection name for supervisor-sensor assignments in Firestore */
+    public static final String FIRESTORE_COLLECTION_ASSIGNMENTS = "assignments";
+    
+    /** @deprecated Use FIRESTORE_COLLECTION_SENSORS instead */
+    @Deprecated
     public static final String FIRESTORE_COLLECTION_PERSON_NAMES = "person_names";
     
-    /** Collection name for sensor-supervisor assignments in Firestore */
+    /** @deprecated Use FIRESTORE_COLLECTION_ASSIGNMENTS instead */
+    @Deprecated
     public static final String FIRESTORE_COLLECTION_SENSOR_ASSIGNMENTS = "sensor_assignments";
     
     // ========== UI CONFIGURATION ==========

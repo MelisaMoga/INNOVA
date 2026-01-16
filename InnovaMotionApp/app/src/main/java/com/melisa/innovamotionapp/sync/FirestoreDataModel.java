@@ -9,15 +9,18 @@ import java.util.Map;
  * 
  * Supports the multi-user protocol where each reading includes a sensorId
  * identifying the monitored person (e.g., "sensor001", UUID).
+ * 
+ * Document ID format: {deviceAddress}_{sensorId}_{timestamp}
+ * This format is aggregator-agnostic, allowing data to be queried by sensorId only.
  */
 public class FirestoreDataModel {
     private String deviceAddress;
     private long timestamp;
     private String receivedMsg;
-    private String userId; // The aggregator user ID
+    private String uploadedBy; // The aggregator user ID who uploaded this (metadata only, not part of ID)
     private String sensorId; // The monitored person's ID from hardware
     private long syncTimestamp; // When this was synced to Firestore
-    private String documentId; // Unique document ID: userId_deviceAddress_sensorId_timestamp
+    private String documentId; // Unique document ID: deviceAddress_sensorId_timestamp
 
     // Default constructor required for Firestore
     public FirestoreDataModel() {}
@@ -28,29 +31,40 @@ public class FirestoreDataModel {
      * @param deviceAddress Bluetooth MAC address of the hardware device
      * @param timestamp     When the reading was received (epoch millis)
      * @param receivedMsg   The hex code payload (e.g., "0xAB3311")
-     * @param userId        The aggregator user ID who owns this data
+     * @param uploadedBy    The aggregator user ID who uploaded this data (metadata)
      * @param sensorId      The monitored person's ID from hardware (e.g., "sensor001")
      */
-    public FirestoreDataModel(String deviceAddress, long timestamp, String receivedMsg, String userId, String sensorId) {
+    public FirestoreDataModel(String deviceAddress, long timestamp, String receivedMsg, String uploadedBy, String sensorId) {
         this.deviceAddress = deviceAddress;
         this.timestamp = timestamp;
         this.receivedMsg = receivedMsg;
-        this.userId = userId;
+        this.uploadedBy = uploadedBy;
         this.sensorId = sensorId;
         this.syncTimestamp = System.currentTimeMillis();
-        this.documentId = generateDocumentId(userId, deviceAddress, sensorId, timestamp);
+        this.documentId = generateDocumentId(deviceAddress, sensorId, timestamp);
     }
 
     /**
-     * Generate a unique document ID using userId, deviceAddress, sensorId, and timestamp.
-     * Format: userId_deviceAddress_sensorId_timestamp
+     * Generate a unique document ID using deviceAddress, sensorId, and timestamp.
+     * Format: deviceAddress_sensorId_timestamp
      * 
-     * Including sensorId ensures uniqueness even when multiple sensors report at the same timestamp.
+     * This format is aggregator-agnostic - the same sensor always produces the same
+     * document ID regardless of which aggregator uploads the data.
      */
-    public static String generateDocumentId(String userId, String deviceAddress, String sensorId, long timestamp) {
+    public static String generateDocumentId(String deviceAddress, String sensorId, long timestamp) {
         String cleanDeviceAddress = deviceAddress != null ? deviceAddress.replace(":", "") : "unknown";
         String cleanSensorId = sensorId != null ? sensorId : "unknown";
-        return userId + "_" + cleanDeviceAddress + "_" + cleanSensorId + "_" + timestamp;
+        return cleanDeviceAddress + "_" + cleanSensorId + "_" + timestamp;
+    }
+    
+    /**
+     * @deprecated Use {@link #generateDocumentId(String, String, long)} instead.
+     * Kept for backward compatibility during migration.
+     */
+    @Deprecated
+    public static String generateDocumentId(String userId, String deviceAddress, String sensorId, long timestamp) {
+        // Delegate to new format (ignoring userId)
+        return generateDocumentId(deviceAddress, sensorId, timestamp);
     }
 
     /**
@@ -61,7 +75,7 @@ public class FirestoreDataModel {
         doc.put("deviceAddress", deviceAddress);
         doc.put("timestamp", timestamp);
         doc.put("receivedMsg", receivedMsg);
-        doc.put("userId", userId);
+        doc.put("uploadedBy", uploadedBy);
         doc.put("sensorId", sensorId);
         doc.put("syncTimestamp", syncTimestamp);
         doc.put("documentId", documentId);
@@ -80,7 +94,13 @@ public class FirestoreDataModel {
         model.timestamp = tsObj instanceof Long ? (Long) tsObj : 0L;
         
         model.receivedMsg = (String) doc.get("receivedMsg");
-        model.userId = (String) doc.get("userId");
+        
+        // Handle uploadedBy with fallback to legacy userId field
+        model.uploadedBy = (String) doc.get("uploadedBy");
+        if (model.uploadedBy == null) {
+            model.uploadedBy = (String) doc.get("userId"); // Legacy fallback
+        }
+        
         model.sensorId = (String) doc.get("sensorId");
         
         // Handle syncTimestamp - could be Long or null
@@ -117,12 +137,28 @@ public class FirestoreDataModel {
         this.receivedMsg = receivedMsg;
     }
 
-    public String getUserId() {
-        return userId;
+    public String getUploadedBy() {
+        return uploadedBy;
     }
 
+    public void setUploadedBy(String uploadedBy) {
+        this.uploadedBy = uploadedBy;
+    }
+    
+    /**
+     * @deprecated Use {@link #getUploadedBy()} instead.
+     */
+    @Deprecated
+    public String getUserId() {
+        return uploadedBy;
+    }
+
+    /**
+     * @deprecated Use {@link #setUploadedBy(String)} instead.
+     */
+    @Deprecated
     public void setUserId(String userId) {
-        this.userId = userId;
+        this.uploadedBy = userId;
     }
 
     public String getSensorId() {
