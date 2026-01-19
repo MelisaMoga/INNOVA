@@ -10,10 +10,14 @@ import android.app.Service;
 import android.bluetooth.BluetoothDevice;
 import android.content.Intent;
 import android.os.Binder;
+import android.os.Build;
 import android.os.IBinder;
 import android.util.Log;
 
+import android.content.pm.ServiceInfo;
+
 import androidx.core.app.NotificationCompat;
+import androidx.core.app.ServiceCompat;
 
 import com.melisa.innovamotionapp.R;
 import com.melisa.innovamotionapp.activities.AggregatorMenuActivity;
@@ -109,6 +113,9 @@ public class DeviceCommunicationService extends Service {
     private DeviceCommunicationThread deviceCommunicationThread; // The connection thread that handles communication with a device
     private int attemptToReconnectCounter = 0;
     private final int MAX_NUM_CONNECTING_CONSECUTIVE_ATTEMPTS = 2;
+    
+    // Flag to prevent auto-reconnection during intentional disconnect/shutdown
+    private volatile boolean isStopping = false;
 
     // Database operations
     private InnovaDatabase database;
@@ -128,6 +135,9 @@ public class DeviceCommunicationService extends Service {
 
     @Override
     public int onStartCommand(Intent intent, int flags, int startId) {
+        // Reset stopping flag when service is (re)started
+        isStopping = false;
+        
         // Foreground start with a neutral/starting state
         Notification initial = new androidx.core.app.NotificationCompat.Builder(this, NotificationConfig.CHANNEL_BT_SERVICE)
                 .setSmallIcon(R.drawable.baseline_bluetooth_connected_24)
@@ -136,7 +146,27 @@ public class DeviceCommunicationService extends Service {
                 .setOngoing(true)
                 .build();
 
-        startForeground(NotificationConfig.NOTIF_ID_BT_SERVICE, initial);
+        // Use ServiceCompat for proper foreground service type declaration (Android 14+ requirement)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+            // Android 14+ requires explicit foreground service type
+            ServiceCompat.startForeground(
+                    this,
+                    NotificationConfig.NOTIF_ID_BT_SERVICE,
+                    initial,
+                    ServiceInfo.FOREGROUND_SERVICE_TYPE_CONNECTED_DEVICE | ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC
+            );
+        } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            // Android 10-13: service type supported but not required
+            ServiceCompat.startForeground(
+                    this,
+                    NotificationConfig.NOTIF_ID_BT_SERVICE,
+                    initial,
+                    ServiceInfo.FOREGROUND_SERVICE_TYPE_CONNECTED_DEVICE | ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC
+            );
+        } else {
+            // Pre-Android 10: no service type concept
+            startForeground(NotificationConfig.NOTIF_ID_BT_SERVICE, initial);
+        }
 
         return START_STICKY; // or START_REDELIVER_INTENT
     }
@@ -259,9 +289,17 @@ public class DeviceCommunicationService extends Service {
                 public void onConnectionDisconnected() {
                     GlobalData.getInstance().setIsConnectedDevice(false);
                     try {
-                        fileOutputStream.close();
+                        if (fileOutputStream != null) {
+                            fileOutputStream.close();
+                        }
                     } catch (IOException e) {
-                        Log.d(TAG, "ERROR closing input stream", e);
+                        Log.d(TAG, "ERROR closing file output stream", e);
+                    }
+
+                    // If we're intentionally stopping, don't attempt reconnection or update notifications
+                    if (isStopping) {
+                        Log.i(TAG, "onConnectionDisconnected - stopping flag set, skipping reconnection");
+                        return;
                     }
 
                     // Update the same foreground notification to show we’re reconnecting
@@ -273,12 +311,14 @@ public class DeviceCommunicationService extends Service {
 
 
                     if (attemptToReconnectCounter >= MAX_NUM_CONNECTING_CONSECUTIVE_ATTEMPTS) {
-                        // Stop current service
+                        // Max reconnection attempts reached - stop current service
+                        Log.w(TAG, "Max reconnection attempts reached, stopping service");
                         GlobalData.getInstance().deviceCommunicationManager.stopService();
-                        stopForeground(true);
+                        ServiceCompat.stopForeground(DeviceCommunicationService.this, ServiceCompat.STOP_FOREGROUND_REMOVE);
                         stopSelf();
                     } else {
                         attemptToReconnectCounter += 1;
+                        Log.i(TAG, "Attempting to reconnect, attempt " + attemptToReconnectCounter);
                         BluetoothDevice deviceToConnect = GlobalData.getInstance().deviceCommunicationManager.getDeviceToConnect();
                         connectToDevice(deviceToConnect);
                     }
@@ -294,15 +334,47 @@ public class DeviceCommunicationService extends Service {
     }
 
     /**
-     * Disconnect the currently connected device.
+     * Disconnect the currently connected device by properly closing the Bluetooth socket.
+     * This ensures the Classic Bluetooth connection is fully terminated.
      */
     public void disconnectDevice() {
         if (deviceCommunicationThread != null) {
-            if (isDeviceConnected()) {
-                deviceCommunicationThread.interrupt();
-            }
+            // Cancel properly closes the BluetoothSocket, which is the correct way
+            // to terminate a Classic Bluetooth connection (not just interrupt())
+            deviceCommunicationThread.cancel();
             deviceCommunicationThread = null;
         }
+    }
+    
+    /**
+     * Disconnects the device and stops the foreground service completely.
+     * This is the proper shutdown sequence for intentional disconnects (user-initiated).
+     * 
+     * Sequence:
+     * 1. Set stopping flag to prevent auto-reconnection in onConnectionDisconnected
+     * 2. Disconnect device (closes BluetoothSocket)
+     * 3. Remove foreground notification
+     * 4. Stop the service
+     */
+    public void disconnectAndStop() {
+        Log.i(TAG, "disconnectAndStop() - initiating graceful shutdown");
+        
+        // Set flag FIRST to prevent onConnectionDisconnected from auto-reconnecting
+        isStopping = true;
+        
+        // Disconnect the Bluetooth socket
+        disconnectDevice();
+        
+        // Update global connection state
+        GlobalData.getInstance().setIsConnectedDevice(false);
+        
+        // Stop foreground and remove notification
+        ServiceCompat.stopForeground(this, ServiceCompat.STOP_FOREGROUND_REMOVE);
+        
+        // Stop the service itself
+        stopSelf();
+        
+        Log.i(TAG, "disconnectAndStop() - shutdown complete");
     }
 
     @Override

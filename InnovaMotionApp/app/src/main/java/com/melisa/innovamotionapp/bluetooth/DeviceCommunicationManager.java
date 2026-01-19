@@ -61,17 +61,23 @@ public class DeviceCommunicationManager {
     }
 
     /**
-     * Disconnect the currently connected device and stop the service if no devices are connected.
+     * Disconnect the currently connected device and stop the foreground service.
+     * 
+     * This properly shuts down the Bluetooth connection by:
+     * 1. Closing the BluetoothSocket (via service.disconnectAndStop())
+     * 2. Removing the foreground notification
+     * 3. Stopping the service
+     * 4. Unbinding from the service connection
      */
     public void disconnectDevice() {
         if (deviceCommunicationService != null) {
-            deviceCommunicationService.disconnectDevice();
+            // Use disconnectAndStop() for proper shutdown sequence
+            // This sets the stopping flag, closes the socket, removes foreground, and stops the service
+            deviceCommunicationService.disconnectAndStop();
         }
 
-        // Optionally stop the service if no device is connected
-        if (!isDeviceConnected()) {
-            stopService();
-        }
+        // Unbind from the service to prevent leaks
+        unbindFromService();
     }
 
     /**
@@ -84,14 +90,34 @@ public class DeviceCommunicationManager {
     }
 
     /**
+     * Unbinds from the service connection to prevent memory leaks.
+     * Should be called after the service has been stopped.
+     */
+    private void unbindFromService() {
+        if (deviceCommunicationService != null) {
+            try {
+                context.unbindService(serviceConnection);
+            } catch (IllegalArgumentException e) {
+                // Service was already unbound or not bound
+            }
+            deviceCommunicationService = null;
+        }
+    }
+    
+    /**
      * Stop the service when no device is connected.
+     * This is primarily called from the service's onConnectionDisconnected callback
+     * when auto-reconnection fails.
      */
     public void stopService() {
         if (deviceCommunicationService != null) {
+            // The service will handle stopping itself via disconnectAndStop()
+            // We just need to unbind
+            unbindFromService();
+            
+            // Also explicitly stop the service in case it wasn't stopped internally
             Intent serviceIntent = new Intent(context, DeviceCommunicationService.class);
-            context.unbindService(serviceConnection);
             context.stopService(serviceIntent);
-            deviceCommunicationService = null;
         }
     }
 }
