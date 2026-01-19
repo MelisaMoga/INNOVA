@@ -132,14 +132,17 @@ public class BtSettingsViewModel extends ViewModel {
 
 
     public void onNearbyDeviceFound(BluetoothDevice device) {
-        String lastDeviceAddress = GlobalData.getInstance().userDeviceSettingsStorage.getLatestDeviceAddress();
-        // Try to reconnect to it, if is the same address as last one
-        if (device.getAddress().equals(lastDeviceAddress)) {
-            connectToDevice(device);
-        } else {
-            globalData.nearbyBtDevices.add(device);
-            nearbyDevices.setValue(new ArrayList<>(globalData.nearbyBtDevices));
-        }
+//        String lastDeviceAddress = GlobalData.getInstance().userDeviceSettingsStorage.getLatestDeviceAddress();
+//        // Try to reconnect to it, if is the same address as last one
+//        if (device.getAddress().equals(lastDeviceAddress)) {
+//            connectToDevice(device);
+//        } else {
+//            globalData.nearbyBtDevices.add(device);
+//            nearbyDevices.setValue(new ArrayList<>(globalData.nearbyBtDevices));
+//        }
+
+        globalData.nearbyBtDevices.add(device);
+        nearbyDevices.setValue(new ArrayList<>(globalData.nearbyBtDevices));
     }
 
     private void onDiscoveryFinished() {
