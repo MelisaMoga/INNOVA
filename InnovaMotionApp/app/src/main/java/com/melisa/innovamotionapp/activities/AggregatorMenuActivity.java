@@ -46,7 +46,7 @@ public class AggregatorMenuActivity extends BaseActivity {
         setupClickListeners();
         
         // Initial dashboard button state (will be updated in onBaseResume)
-        updateDashboardButtonState(false);
+        updateDashboardButtonState(true);
         
         // Request notification permission for foreground service (Android 13+)
         requestNotificationPermission();
@@ -95,11 +95,11 @@ public class AggregatorMenuActivity extends BaseActivity {
     @Override
     protected void onBaseResume() {
         super.onBaseResume();
-        Logger.d(TAG, "AggregatorMenuActivity resumed - checking data availability");
-        
-        // Refresh dashboard button state on resume
-        // This handles the case where user returns from BT connection with new data
-        checkDataAvailability();
+//        Logger.d(TAG, "AggregatorMenuActivity resumed - checking data availability");
+//
+//        // Refresh dashboard button state on resume
+//        // This handles the case where user returns from BT connection with new data
+//        checkDataAvailability();
     }
 
     /**
