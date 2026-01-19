@@ -35,6 +35,8 @@ import com.melisa.innovamotionapp.activities.RoleSelectionActivity;
 import com.melisa.innovamotionapp.activities.SupervisorDashboardActivity;
 import com.melisa.innovamotionapp.data.models.UserProfile;
 import com.melisa.innovamotionapp.sync.FirestoreSyncService;
+import com.melisa.innovamotionapp.sync.SessionGate;
+import com.melisa.innovamotionapp.utils.GlobalData;
 
 import java.util.HashMap;
 import java.util.Map;
@@ -262,19 +264,29 @@ public class LoginActivity extends AppCompatActivity {
                         UserProfile profile = UserProfile.fromDocument(document);
                         List<String> roles = profile != null ? profile.getRoles() : new ArrayList<>();
                         
-                        Log.d(TAG, "User found with roles: " + roles);
+                        // Check for LOCAL role preference (per-device, not Firestore)
+                        String localRolePref = GlobalData.getInstance().userDeviceSettingsStorage
+                                .getLastSelectedRole(user.getUid());
+                        Log.d(TAG, "User found with roles: " + roles + ", localRolePref: " + localRolePref);
                         
                         // Check if user has confirmed roles
                         if (!roles.isEmpty()) {
-                            // Always show role selection - let user choose their context each login
-                            Log.d(TAG, "User has roles: " + roles + ", showing RoleSelectionActivity");
-                            hideLoading();
-                            navigateToRoleSelection();
+                            // Check if local role preference exists and is valid
+                            if (localRolePref != null && roles.contains(localRolePref)) {
+                                // Auto-redirect: user has a saved local role preference
+                                Log.d(TAG, "Auto-redirecting to " + localRolePref + " (local preference)");
+                                autoRedirectWithRole(localRolePref);
+                            } else {
+                                // No local preference or invalid - show role selection
+                                Log.d(TAG, "No valid local role preference, showing RoleSelectionActivity");
+                                hideLoading();
+                                navigateToRoleSelection();
+                            }
                         } else {
                             // No roles yet - check legacy 'role' field
                             String legacyRole = document.getString("role");
                             if (legacyRole != null && !legacyRole.isEmpty()) {
-                                // User has legacy role - also show role selection
+                                // User has legacy role - show role selection to migrate
                                 Log.d(TAG, "Found legacy role field: " + legacyRole + ", showing RoleSelectionActivity");
                                 hideLoading();
                                 navigateToRoleSelection();
@@ -292,6 +304,39 @@ public class LoginActivity extends AppCompatActivity {
                     Log.e(TAG, "Error checking user in Firestore", e);
                     handleFirestoreError(e);
                 });
+    }
+    
+    /**
+     * Auto-redirect to the appropriate dashboard based on the saved role preference.
+     * Sets up GlobalData and runs SessionGate bootstrap before navigating.
+     * 
+     * @param role The saved role ("aggregator" or "supervisor")
+     */
+    private void autoRedirectWithRole(String role) {
+        showLoading("Restoring session...");
+        
+        // Set the role in GlobalData BEFORE bootstrap
+        GlobalData.getInstance().currentUserRole = role;
+        Log.d(TAG, "Set GlobalData.currentUserRole to: " + role);
+        
+        // Run SessionGate bootstrap to initialize sync services
+        SessionGate.getInstance(this).reloadSessionAndBootstrap(
+            new SessionGate.SessionReadyCallback() {
+                @Override
+                public void onSessionReady(String userId, String sessionRole, List<String> supervisedUserIds) {
+                    Log.i(TAG, "Session ready, navigating to dashboard for role: " + role);
+                    hideLoading();
+                    navigateBasedOnRole(role);
+                }
+                
+                @Override
+                public void onSessionError(String error) {
+                    Log.w(TAG, "Session error during auto-redirect: " + error + ", proceeding anyway");
+                    hideLoading();
+                    navigateBasedOnRole(role);
+                }
+            }
+        );
     }
     
     /**
@@ -345,6 +390,25 @@ public class LoginActivity extends AppCompatActivity {
     private void signOut() {
         Log.d(TAG, "Starting sign-out process");
         showLoading("Signing out...");
+        
+        // Clear local role preference BEFORE signing out
+        // This ensures role selection appears on next login
+        FirebaseUser currentUser = mAuth.getCurrentUser();
+        if (currentUser != null) {
+            GlobalData.getInstance().userDeviceSettingsStorage
+                    .clearLastSelectedRole(currentUser.getUid());
+            Log.d(TAG, "Cleared local role preference for user: " + currentUser.getUid());
+        }
+        
+        completeSignOut();
+    }
+    
+    /**
+     * Completes the sign-out process.
+     */
+    private void completeSignOut() {
+        // Reset GlobalData session state
+        GlobalData.getInstance().resetSessionData();
         
         mAuth.signOut();
 

@@ -78,6 +78,9 @@ public class RoleSelectionActivity extends AppCompatActivity {
         // Set active role in GlobalData for the session
         GlobalData.getInstance().currentUserRole = Constants.ROLE_AGGREGATOR;
         
+        // Save role preference locally for auto-redirect on next app start
+        saveRolePreferenceLocally(Constants.ROLE_AGGREGATOR);
+        
         // Append role to Firestore (idempotent), then bootstrap
         appendRoleToFirestore(Constants.ROLE_AGGREGATOR, () -> {
             // Start SessionGate bootstrap for aggregator
@@ -108,6 +111,9 @@ public class RoleSelectionActivity extends AppCompatActivity {
         // Set active role in GlobalData for the session
         GlobalData.getInstance().currentUserRole = Constants.ROLE_SUPERVISOR;
         
+        // Save role preference locally for auto-redirect on next app start
+        saveRolePreferenceLocally(Constants.ROLE_SUPERVISOR);
+        
         // Append role to Firestore (idempotent), then bootstrap
         appendRoleToFirestore(Constants.ROLE_SUPERVISOR, () -> {
             // Start SessionGate bootstrap for supervisor
@@ -135,6 +141,24 @@ public class RoleSelectionActivity extends AppCompatActivity {
     }
     
     /**
+     * Saves the selected role preference locally on this device.
+     * This enables auto-redirect to the same dashboard on next app start.
+     * 
+     * @param role The selected role ("aggregator" or "supervisor")
+     */
+    private void saveRolePreferenceLocally(String role) {
+        FirebaseUser user = FirebaseAuth.getInstance().getCurrentUser();
+        if (user == null) {
+            Log.w(TAG, "No authenticated user, cannot save local role preference");
+            return;
+        }
+        
+        GlobalData.getInstance().userDeviceSettingsStorage
+                .saveLastSelectedRole(user.getUid(), role);
+        Log.d(TAG, "Saved local role preference: " + role + " for user: " + user.getUid());
+    }
+    
+    /**
      * Appends the selected role to the user's Firestore 'roles' array if not already present.
      * Uses FieldValue.arrayUnion() which is idempotent - won't duplicate if already exists.
      */
@@ -149,12 +173,12 @@ public class RoleSelectionActivity extends AppCompatActivity {
         FirebaseFirestore db = FirebaseFirestore.getInstance();
         Map<String, Object> updates = new HashMap<>();
         updates.put("roles", FieldValue.arrayUnion(role)); // Appends role if not present
-        updates.put("lastSelectedRole", role); // Track last selected for UX
+        // Note: lastSelectedRole is now stored locally per-device, not in Firestore
         
         db.collection("users").document(user.getUid())
             .set(updates, SetOptions.merge()) // Merge to not overwrite other fields
             .addOnSuccessListener(aVoid -> {
-                Log.d(TAG, "✅ Appended role '" + role + "' to Firestore roles array");
+                Log.d(TAG, "Appended role '" + role + "' to Firestore roles array");
                 if (onComplete != null) onComplete.run();
             })
             .addOnFailureListener(e -> {

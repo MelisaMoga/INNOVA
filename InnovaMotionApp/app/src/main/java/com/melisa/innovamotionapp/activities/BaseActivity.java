@@ -9,6 +9,7 @@ import androidx.annotation.Nullable;
 import androidx.appcompat.app.AppCompatActivity;
 
 import com.google.firebase.auth.FirebaseAuth;
+import com.google.firebase.auth.FirebaseUser;
 import com.melisa.innovamotionapp.R;
 import com.melisa.innovamotionapp._login.login.LoginActivity;
 import com.melisa.innovamotionapp.ui.dialogs.DeveloperPanelDialog;
@@ -146,6 +147,14 @@ public abstract class BaseActivity extends AppCompatActivity {
         Logger.userAction(TAG, "Sign out requested");
         
         try {
+            // Clear local role preference BEFORE signing out
+            // This ensures RoleSelectionActivity appears on next login
+            FirebaseUser currentUser = FirebaseAuth.getInstance().getCurrentUser();
+            if (currentUser != null && globalData != null) {
+                globalData.userDeviceSettingsStorage.clearLastSelectedRole(currentUser.getUid());
+                Logger.d(TAG, "Cleared local role preference for user: " + currentUser.getUid());
+            }
+            
             // Disconnect Bluetooth device and stop the service
             if (globalData != null && globalData.deviceCommunicationManager != null) {
                 globalData.deviceCommunicationManager.disconnectDevice();
