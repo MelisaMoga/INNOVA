@@ -18,7 +18,9 @@ import androidx.credentials.CustomCredential;
 import androidx.credentials.GetCredentialRequest;
 import androidx.credentials.GetCredentialResponse;
 import androidx.credentials.exceptions.ClearCredentialException;
+import androidx.credentials.exceptions.GetCredentialCancellationException;
 import androidx.credentials.exceptions.GetCredentialException;
+import androidx.credentials.exceptions.NoCredentialException;
 
 import com.google.android.libraries.identity.googleid.GetGoogleIdOption;
 import com.google.android.libraries.identity.googleid.GoogleIdTokenCredential;
@@ -192,14 +194,20 @@ public class LoginActivity extends AppCompatActivity {
 
                     @Override
                     public void onError(GetCredentialException e) {
-                        Log.e(TAG, "Sign-in failed: " + e.getLocalizedMessage(), e);
+                        Log.e(TAG, "Sign-in failed: " + e.getMessage());
                         runOnUiThread(() -> {
                             hideLoading();
-                            String errorMsg = e.getLocalizedMessage();
-                            if (errorMsg != null && errorMsg.contains("Unknown calling package")) {
-                                showErrorToast("Google Play Services issue detected");
+
+                            // Handle specific types of errors
+                            if (e instanceof GetCredentialCancellationException) {
+                                // User cancelled the UI (swiped down or backed out)
+                                Log.d(TAG, "User cancelled sign-in");
+                            } else if (e instanceof NoCredentialException) {
+                                // This is your "No Credentials" error.
+                                // Often happens if Google Play Services is confused.
+                                showErrorToast("No account selected. Please try again.");
                             } else {
-                                showErrorToast("Sign-in failed: " + errorMsg);
+                                showErrorToast("Sign-in error: " + e.getLocalizedMessage());
                             }
                         });
                     }
