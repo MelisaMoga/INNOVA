@@ -31,16 +31,16 @@
     <string name="posture_unused_footwear_risk">Unknown</string>
     <!--  StandingPosture  -->
     <string name="posture_standing_msg">%1$s sta in picioare</string>
-    <string name="posture_standing_risk">Unknown</string>
+    <string name="posture_standing_risk">Risc mediu</string>
     <!--  WalkingPosture  -->
     <string name="posture_walking_msg">%1$s merge …</string>
-    <string name="posture_walking_risk">Unknown</string>
+    <string name="posture_walking_risk">Risc mediu</string>
     <!--  SittingPosture  -->
     <string name="posture_sitting_msg">%1$s sta pe scaun</string>
-    <string name="posture_sitting_risk">minim</string>
+    <string name="posture_sitting_risk">Risc mic</string>
     <!--  FallingPosture  -->
     <string name="posture_falling_msg">%1$s a cazut!!!</string>
-    <string name="posture_falling_risk">Unknown</string>
+    <string name="posture_falling_risk">Risc mare!</string>
     <!--  UnknownPosture  -->
     <string name="posture_unknown_msg">Unknown posture</string>
     <string name="posture_unknown_risk">Unknown</string>
