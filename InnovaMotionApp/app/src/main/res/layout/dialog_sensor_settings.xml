@@ -60,7 +60,15 @@
         android:textColor="?android:attr/textColorPrimary"
         android:layout_marginBottom="8dp" />
 
-    <!-- Current Supervisor Status -->
+    <!-- Current Supervisors (chips with remove action) -->
+    <com.google.android.material.chip.ChipGroup
+        android:id="@+id/supervisorChipGroup"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginBottom="8dp"
+        app:singleLine="false" />
+
+    <!-- Status text for when no supervisors -->
     <TextView
         android:id="@+id/supervisorStatusText"
         android:layout_width="match_parent"
@@ -68,7 +76,8 @@
         android:text="@string/supervisor_not_assigned"
         android:textSize="12sp"
         android:textColor="?android:attr/textColorSecondary"
-        android:layout_marginBottom="8dp" />
+        android:layout_marginBottom="8dp"
+        android:visibility="gone" />
 
     <!-- Supervisor Email Input with Autocomplete -->
     <com.google.android.material.textfield.TextInputLayout
@@ -89,16 +98,5 @@
             android:imeOptions="actionDone" />
 
     </com.google.android.material.textfield.TextInputLayout>
-
-    <!-- Unassign Button (only visible when supervisor is assigned) -->
-    <com.google.android.material.button.MaterialButton
-        android:id="@+id/unassignButton"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:text="@string/unassign_supervisor"
-        android:visibility="gone"
-        style="@style/Widget.MaterialComponents.Button.TextButton"
-        app:icon="@drawable/ic_clear"
-        android:layout_gravity="end" />
 
 </LinearLayout>

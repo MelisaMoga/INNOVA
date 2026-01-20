@@ -237,4 +237,5 @@
     <string name="no_supervisor_found">No supervisor found with that email</string>
     <string name="searching_supervisors">Searching supervisors…</string>
     <string name="supervisor_label">Supervisor:</string>
+    <string name="supervisors_label">Supervisors:</string>
 </resources>

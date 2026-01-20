@@ -126,7 +126,7 @@ public class PersonNamesViewModel extends AndroidViewModel {
     }
 
     /**
-     * Unassign a specific supervisor from a sensor.
+     * Unassign a specific supervisor from a sensor by UID.
      * 
      * @param sensorId The sensor ID to unassign
      * @param supervisorUid The supervisor UID to unassign
@@ -135,6 +135,30 @@ public class PersonNamesViewModel extends AndroidViewModel {
     public void unassignSupervisor(@NonNull String sensorId, @NonNull String supervisorUid, 
                                     @NonNull AssignmentResultCallback callback) {
         assignmentService.unassignSupervisor(sensorId, supervisorUid, new SensorAssignmentService.AssignmentCallback() {
+            @Override
+            public void onSuccess() {
+                // Refresh the map to update supervisor list for this sensor
+                loadAssignmentMap();
+                callback.onSuccess();
+            }
+
+            @Override
+            public void onError(String error) {
+                callback.onError(error);
+            }
+        });
+    }
+
+    /**
+     * Unassign a specific supervisor from a sensor by email.
+     * 
+     * @param sensorId The sensor ID to unassign
+     * @param supervisorEmail The supervisor email to unassign
+     * @param callback Result callback
+     */
+    public void unassignSupervisorByEmail(@NonNull String sensorId, @NonNull String supervisorEmail, 
+                                           @NonNull AssignmentResultCallback callback) {
+        assignmentService.unassignSupervisorByEmail(sensorId, supervisorEmail, new SensorAssignmentService.AssignmentCallback() {
             @Override
             public void onSuccess() {
                 // Refresh the map to update supervisor list for this sensor

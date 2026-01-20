@@ -61,10 +61,7 @@ public class PersonNamesAdapter extends ListAdapter<MonitoredPerson, PersonNames
     public void onBindViewHolder(@NonNull ViewHolder holder, int position) {
         MonitoredPerson person = getItem(position);
         List<String> supervisorEmails = supervisorMap.get(person.getSensorId());
-        // Get first supervisor for display (UI simplification)
-        String firstSupervisor = (supervisorEmails != null && !supervisorEmails.isEmpty()) 
-                ? supervisorEmails.get(0) : null;
-        holder.bind(person, firstSupervisor, clickListener);
+        holder.bind(person, supervisorEmails, clickListener);
     }
 
     static class ViewHolder extends RecyclerView.ViewHolder {
@@ -75,18 +72,26 @@ public class PersonNamesAdapter extends ListAdapter<MonitoredPerson, PersonNames
             this.binding = binding;
         }
 
-        void bind(MonitoredPerson person, @Nullable String supervisorEmail, OnItemClickListener listener) {
+        void bind(MonitoredPerson person, @Nullable List<String> supervisorEmails, OnItemClickListener listener) {
             // Display name (bold, primary text)
             binding.displayNameText.setText(person.getDisplayName());
             
             // Sensor ID (smaller, gray text)
             binding.sensorIdText.setText(person.getSensorId());
             
-            // Supervisor info
-            if (supervisorEmail != null && !supervisorEmail.isEmpty()) {
-                binding.supervisorText.setText(
-                        binding.getRoot().getContext().getString(R.string.supervisor_label) + " " + supervisorEmail
-                );
+            // Supervisor info - show all assigned supervisors
+            if (supervisorEmails != null && !supervisorEmails.isEmpty()) {
+                String supervisorText;
+                if (supervisorEmails.size() == 1) {
+                    // Single supervisor
+                    supervisorText = binding.getRoot().getContext().getString(R.string.supervisor_label) 
+                            + " " + supervisorEmails.get(0);
+                } else {
+                    // Multiple supervisors - show all comma-separated
+                    supervisorText = binding.getRoot().getContext().getString(R.string.supervisors_label) 
+                            + " " + String.join(", ", supervisorEmails);
+                }
+                binding.supervisorText.setText(supervisorText);
                 binding.supervisorText.setVisibility(View.VISIBLE);
             } else {
                 binding.supervisorText.setVisibility(View.GONE);

@@ -6,6 +6,8 @@ import android.util.Log;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
+import com.google.android.gms.tasks.Task;
+import com.google.android.gms.tasks.Tasks;
 import com.google.firebase.auth.FirebaseAuth;
 import com.google.firebase.auth.FirebaseUser;
 import com.google.firebase.firestore.DocumentSnapshot;
@@ -211,6 +213,36 @@ public class SensorAssignmentService {
                     Log.e(TAG, "Failed to delete assignment", e);
                     callback.onError("Failed to unassign: " + e.getMessage());
                 });
+    }
+    
+    /**
+     * Unassign a supervisor from a sensor by email.
+     * Looks up the supervisor UID from the email, then performs the unassignment.
+     * 
+     * @param sensorId        The sensor ID
+     * @param supervisorEmail The supervisor's email
+     * @param callback        Result callback
+     */
+    public void unassignSupervisorByEmail(@NonNull String sensorId, @NonNull String supervisorEmail,
+                                          @NonNull AssignmentCallback callback) {
+        Log.d(TAG, "Unassigning supervisor by email " + supervisorEmail + " from sensor " + sensorId);
+        
+        findSupervisorByEmail(supervisorEmail, new FindSupervisorCallback() {
+            @Override
+            public void onFound(SupervisorInfo supervisor) {
+                unassignSupervisor(sensorId, supervisor.uid, callback);
+            }
+            
+            @Override
+            public void onNotFound() {
+                callback.onError("Supervisor not found with email: " + supervisorEmail);
+            }
+            
+            @Override
+            public void onError(String error) {
+                callback.onError(error);
+            }
+        });
     }
     
     /**
@@ -498,29 +530,71 @@ public class SensorAssignmentService {
                 .whereEqualTo("assignedBy", aggregatorUid)
                 .get()
                 .addOnSuccessListener(querySnapshot -> {
-                    Map<String, List<String>> map = new HashMap<>();
+                    Map<String, List<String>> uidMap = new HashMap<>();
                     
                     // Collect supervisor UIDs to resolve emails
                     List<String> supervisorUids = new ArrayList<>();
-                    Map<String, String> sensorToSupervisorUid = new HashMap<>();
                     
                     for (QueryDocumentSnapshot doc : querySnapshot) {
                         String sensorId = doc.getString("sensorId");
                         String supervisorUid = doc.getString("supervisorUid");
                         if (sensorId != null && supervisorUid != null) {
-                            if (!map.containsKey(sensorId)) {
-                                map.put(sensorId, new ArrayList<>());
+                            if (!uidMap.containsKey(sensorId)) {
+                                uidMap.put(sensorId, new ArrayList<>());
                             }
-                            // Temporarily store UID, will resolve to email
-                            map.get(sensorId).add(supervisorUid);
+                            uidMap.get(sensorId).add(supervisorUid);
                             if (!supervisorUids.contains(supervisorUid)) {
                                 supervisorUids.add(supervisorUid);
+                            }
                         }
                     }
+                    
+                    // If no supervisors, return empty map
+                    if (supervisorUids.isEmpty()) {
+                        callback.onResult(new HashMap<>());
+                        return;
                     }
                     
-                    // For now, return UIDs. A more complete implementation would resolve emails.
-                    callback.onResult(map);
+                    // Batch fetch user documents to resolve UIDs to emails
+                    List<Task<DocumentSnapshot>> fetchTasks = new ArrayList<>();
+                    for (String uid : supervisorUids) {
+                        fetchTasks.add(firestore.collection(COLLECTION_USERS).document(uid).get());
+                    }
+                    
+                    Tasks.whenAllSuccess(fetchTasks)
+                            .addOnSuccessListener(results -> {
+                                // Build UID -> email mapping
+                                Map<String, String> uidToEmail = new HashMap<>();
+                                for (Object result : results) {
+                                    DocumentSnapshot doc = (DocumentSnapshot) result;
+                                    if (doc.exists()) {
+                                        String email = doc.getString("email");
+                                        if (email != null) {
+                                            uidToEmail.put(doc.getId(), email);
+                                        }
+                                    }
+                                }
+                                
+                                // Replace UIDs with emails in the result map
+                                Map<String, List<String>> emailMap = new HashMap<>();
+                                for (Map.Entry<String, List<String>> entry : uidMap.entrySet()) {
+                                    List<String> emails = new ArrayList<>();
+                                    for (String uid : entry.getValue()) {
+                                        // Use email if found, otherwise fallback to UID
+                                        String email = uidToEmail.getOrDefault(uid, uid);
+                                        emails.add(email);
+                                    }
+                                    emailMap.put(entry.getKey(), emails);
+                                }
+                                
+                                Log.d(TAG, "Resolved " + uidToEmail.size() + " UIDs to emails for assignment map");
+                                callback.onResult(emailMap);
+                            })
+                            .addOnFailureListener(e -> {
+                                Log.w(TAG, "Failed to resolve some UIDs to emails, returning UIDs as fallback", e);
+                                // Fallback: return UIDs if email resolution fails
+                                callback.onResult(uidMap);
+                            });
                 })
                 .addOnFailureListener(e -> {
                     Log.e(TAG, "Failed to get assignment map", e);

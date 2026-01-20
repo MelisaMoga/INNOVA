@@ -8,11 +8,15 @@ import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.fragment.app.DialogFragment;
 
+import com.google.android.material.chip.Chip;
 import com.google.android.material.dialog.MaterialAlertDialogBuilder;
 import com.melisa.innovamotionapp.R;
 import com.melisa.innovamotionapp.databinding.DialogSensorSettingsBinding;
 import com.melisa.innovamotionapp.sync.SensorAssignmentService;
 import com.melisa.innovamotionapp.ui.helpers.SupervisorEmailAutocomplete;
+
+import java.util.ArrayList;
+import java.util.List;
 
 /**
  * Dialog for editing sensor settings including display name and supervisor assignment.
@@ -27,7 +31,7 @@ public class SensorSettingsDialog extends DialogFragment {
 
     private static final String ARG_SENSOR_ID = "sensor_id";
     private static final String ARG_CURRENT_NAME = "current_name";
-    private static final String ARG_CURRENT_SUPERVISOR = "current_supervisor";
+    private static final String ARG_CURRENT_SUPERVISORS = "current_supervisors";
 
     private DialogSensorSettingsBinding binding;
     private SupervisorEmailAutocomplete emailAutocomplete;
@@ -35,7 +39,7 @@ public class SensorSettingsDialog extends DialogFragment {
     private OnUnassignListener unassignListener;
     
     private String sensorId;
-    private String currentSupervisorEmail;
+    private List<String> currentSupervisors;
 
     /**
      * Callback for when the user saves changes.
@@ -46,33 +50,39 @@ public class SensorSettingsDialog extends DialogFragment {
          * 
          * @param sensorId The sensor ID
          * @param newName The new display name
-         * @param supervisorEmail The supervisor email (may be empty if not changed)
+         * @param supervisorEmail The new supervisor email to add (may be null if not adding)
          */
         void onSave(String sensorId, String newName, @Nullable String supervisorEmail);
     }
 
     /**
-     * Callback for when the user unassigns the supervisor.
+     * Callback for when the user unassigns a specific supervisor.
      */
     public interface OnUnassignListener {
-        void onUnassign(String sensorId);
+        /**
+         * Called when user removes a supervisor assignment.
+         * 
+         * @param sensorId The sensor ID
+         * @param supervisorEmail The supervisor email being unassigned
+         */
+        void onUnassign(String sensorId, String supervisorEmail);
     }
 
     /**
      * Create a new instance of the dialog.
      * 
-     * @param sensorId           The sensor ID (displayed as readonly)
-     * @param currentName        The current display name (pre-filled in input)
-     * @param currentSupervisor  The currently assigned supervisor email (or null)
+     * @param sensorId            The sensor ID (displayed as readonly)
+     * @param currentName         The current display name (pre-filled in input)
+     * @param currentSupervisors  List of currently assigned supervisor emails (or null/empty)
      */
     public static SensorSettingsDialog newInstance(@NonNull String sensorId, 
                                                     @NonNull String currentName,
-                                                    @Nullable String currentSupervisor) {
+                                                    @Nullable ArrayList<String> currentSupervisors) {
         SensorSettingsDialog dialog = new SensorSettingsDialog();
         Bundle args = new Bundle();
         args.putString(ARG_SENSOR_ID, sensorId);
         args.putString(ARG_CURRENT_NAME, currentName);
-        args.putString(ARG_CURRENT_SUPERVISOR, currentSupervisor);
+        args.putStringArrayList(ARG_CURRENT_SUPERVISORS, currentSupervisors);
         dialog.setArguments(args);
         return dialog;
     }
@@ -98,11 +108,11 @@ public class SensorSettingsDialog extends DialogFragment {
 
         sensorId = requireArguments().getString(ARG_SENSOR_ID, "");
         String currentName = requireArguments().getString(ARG_CURRENT_NAME, "");
-        currentSupervisorEmail = requireArguments().getString(ARG_CURRENT_SUPERVISOR, null);
+        ArrayList<String> supervisorsList = requireArguments().getStringArrayList(ARG_CURRENT_SUPERVISORS);
+        currentSupervisors = supervisorsList != null ? new ArrayList<>(supervisorsList) : new ArrayList<>();
 
         setupUI(currentName);
         setupAutocomplete();
-        setupUnassignButton();
 
         return new MaterialAlertDialogBuilder(requireContext())
                 .setTitle(R.string.sensor_settings_title)
@@ -120,21 +130,43 @@ public class SensorSettingsDialog extends DialogFragment {
         binding.nameInput.setText(currentName);
         binding.nameInput.setSelection(currentName.length());
 
-        // Show supervisor status
-        updateSupervisorStatus();
+        // Populate supervisor chips
+        populateSupervisorChips();
     }
 
-    private void updateSupervisorStatus() {
-        if (currentSupervisorEmail != null && !currentSupervisorEmail.isEmpty()) {
-            binding.supervisorStatusText.setText(
-                    getString(R.string.supervisor_assigned, currentSupervisorEmail)
-            );
-            binding.unassignButton.setVisibility(View.VISIBLE);
-            // Pre-fill the email input with current supervisor
-            binding.supervisorEmailInput.setText(currentSupervisorEmail);
+    /**
+     * Populate the ChipGroup with chips for each assigned supervisor.
+     * Each chip has a close icon that triggers unassignment.
+     */
+    private void populateSupervisorChips() {
+        binding.supervisorChipGroup.removeAllViews();
+        
+        if (currentSupervisors == null || currentSupervisors.isEmpty()) {
+            // No supervisors - show status text
+            binding.supervisorChipGroup.setVisibility(View.GONE);
+            binding.supervisorStatusText.setVisibility(View.VISIBLE);
         } else {
-            binding.supervisorStatusText.setText(R.string.supervisor_not_assigned);
-            binding.unassignButton.setVisibility(View.GONE);
+            // Show chips for each supervisor
+            binding.supervisorChipGroup.setVisibility(View.VISIBLE);
+            binding.supervisorStatusText.setVisibility(View.GONE);
+            
+            for (String email : currentSupervisors) {
+                Chip chip = new Chip(requireContext());
+                chip.setText(email);
+                chip.setCloseIconVisible(true);
+                chip.setCheckable(false);
+                chip.setOnCloseIconClickListener(v -> {
+                    // Remove from local list
+                    currentSupervisors.remove(email);
+                    // Notify listener
+                    if (unassignListener != null) {
+                        unassignListener.onUnassign(sensorId, email);
+                    }
+                    // Refresh chips
+                    populateSupervisorChips();
+                });
+                binding.supervisorChipGroup.addView(chip);
+            }
         }
     }
 
@@ -150,19 +182,6 @@ public class SensorSettingsDialog extends DialogFragment {
         );
     }
 
-    private void setupUnassignButton() {
-        binding.unassignButton.setOnClickListener(v -> {
-            if (unassignListener != null) {
-                unassignListener.onUnassign(sensorId);
-            }
-            // Clear the UI state
-            currentSupervisorEmail = null;
-            binding.supervisorEmailInput.setText("");
-            updateSupervisorStatus();
-            dismiss();
-        });
-    }
-
     private void onSave() {
         String newName = "";
         if (binding.nameInput.getText() != null) {
@@ -176,11 +195,13 @@ public class SensorSettingsDialog extends DialogFragment {
 
         // Only trigger save if name is not empty
         if (!newName.isEmpty() && saveListener != null) {
-            // Only pass supervisor email if it's different from current or newly entered
+            // Only pass supervisor email if it's a new one (not already in the list)
             String emailToSave = null;
             if (!supervisorEmail.isEmpty()) {
-                // If email is different from current, or if there's a new one
-                if (currentSupervisorEmail == null || !supervisorEmail.equals(currentSupervisorEmail)) {
+                // Check if email is not already assigned
+                boolean alreadyAssigned = currentSupervisors != null && 
+                        currentSupervisors.contains(supervisorEmail);
+                if (!alreadyAssigned) {
                     emailToSave = supervisorEmail;
                 }
             }

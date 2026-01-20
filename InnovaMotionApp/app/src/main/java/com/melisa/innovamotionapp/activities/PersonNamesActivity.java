@@ -17,6 +17,8 @@ import com.melisa.innovamotionapp.ui.dialogs.SensorSettingsDialog;
 import com.melisa.innovamotionapp.ui.viewmodels.PersonNamesViewModel;
 import com.melisa.innovamotionapp.utils.Logger;
 
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Map;
 
 /**
@@ -84,12 +86,16 @@ public class PersonNamesActivity extends BaseActivity {
      * Show dialog to edit sensor settings (name and supervisor).
      */
     private void showSettingsDialog(MonitoredPerson person) {
-        String supervisorEmail = viewModel.getFirstSupervisorForSensor(person.getSensorId());
+        // Get all supervisors for this sensor
+        List<String> supervisorEmails = viewModel.getSupervisorsForSensor(person.getSensorId());
+        ArrayList<String> supervisorList = supervisorEmails != null 
+                ? new ArrayList<>(supervisorEmails) 
+                : new ArrayList<>();
         
         SensorSettingsDialog dialog = SensorSettingsDialog.newInstance(
                 person.getSensorId(),
                 person.getDisplayName(),
-                supervisorEmail
+                supervisorList
         );
         
         dialog.setOnSaveListener((sensorId, newName, newSupervisorEmail) -> {
@@ -98,7 +104,7 @@ public class PersonNamesActivity extends BaseActivity {
             showToast(getString(R.string.name_updated, newName));
             Logger.userAction(TAG, "Updated name for " + sensorId + " to " + newName);
             
-            // Assign supervisor if email provided
+            // Assign supervisor if new email provided (adds to existing list)
             if (newSupervisorEmail != null && !newSupervisorEmail.isEmpty()) {
                 viewModel.assignSupervisor(sensorId, newSupervisorEmail, 
                         new PersonNamesViewModel.AssignmentResultCallback() {
@@ -117,12 +123,14 @@ public class PersonNamesActivity extends BaseActivity {
             }
         });
         
-        dialog.setOnUnassignListener(sensorId -> {
-            viewModel.unassignAllFromSensor(sensorId, new PersonNamesViewModel.AssignmentResultCallback() {
+        // Handle individual supervisor unassignment (by email)
+        dialog.setOnUnassignListener((sensorId, supervisorEmail) -> {
+            viewModel.unassignSupervisorByEmail(sensorId, supervisorEmail, 
+                    new PersonNamesViewModel.AssignmentResultCallback() {
                 @Override
                 public void onSuccess() {
                     showToast(getString(R.string.supervisor_unassigned_success));
-                    Logger.userAction(TAG, "Unassigned supervisor from " + sensorId);
+                    Logger.userAction(TAG, "Unassigned supervisor " + supervisorEmail + " from " + sensorId);
                 }
 
                 @Override
