@@ -12,6 +12,7 @@ import com.google.firebase.auth.FirebaseAuth;
 import com.google.firebase.auth.FirebaseUser;
 import com.melisa.innovamotionapp.R;
 import com.melisa.innovamotionapp._login.login.LoginActivity;
+import com.melisa.innovamotionapp.sync.FirestoreSyncService;
 import com.melisa.innovamotionapp.ui.dialogs.DeveloperPanelDialog;
 import com.melisa.innovamotionapp.utils.DevShakeDetector;
 import com.melisa.innovamotionapp.utils.FeatureFlags;
@@ -162,11 +163,18 @@ public abstract class BaseActivity extends AppCompatActivity {
                 Logger.d(TAG, "Bluetooth service stopped");
             }
             
-            // Note: stopAllMirrors() and clearLocalData() are handled by SessionGate
-            // when Firebase auth state changes - no need to call them here to avoid
-            // race conditions with executor shutdown.
+            // Explicitly clear Room data and stop Firestore mirrors BEFORE Firebase sign-out
+            // This ensures data is cleared even if there are race conditions with auth listener
+            try {
+                FirestoreSyncService syncService = FirestoreSyncService.getInstance(this);
+                syncService.stopAllMirrors();
+                syncService.clearLocalData();
+                Logger.d(TAG, "Stopped mirrors and cleared local Room data");
+            } catch (Exception e) {
+                Logger.w(TAG, "Error clearing local data during sign-out", e);
+            }
             
-            // Sign out from Firebase (triggers SessionGate.handleUserSignedOut)
+            // Sign out from Firebase (also triggers SessionGate.handleUserSignedOut as backup)
             FirebaseAuth.getInstance().signOut();
             
             // Clear any global data using the new reset method

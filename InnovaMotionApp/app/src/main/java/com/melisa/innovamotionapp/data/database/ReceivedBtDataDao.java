@@ -184,6 +184,18 @@ public interface ReceivedBtDataDao {
     LiveData<List<ReceivedBtDataEntity>> getLatestForEachSensor();
 
     /**
+     * Get the latest reading for each sensor in a specific list.
+     * Used by supervisor dashboard to show only assigned sensors.
+     * 
+     * @param sensorIds List of sensor IDs to filter by
+     * @return LiveData with latest reading for each sensor in the list
+     */
+    @Query("SELECT r.* FROM received_bt_data r " +
+           "INNER JOIN (SELECT sensor_id, MAX(timestamp) as max_ts FROM received_bt_data WHERE sensor_id IN (:sensorIds) GROUP BY sensor_id) latest " +
+           "ON r.sensor_id = latest.sensor_id AND r.timestamp = latest.max_ts")
+    LiveData<List<ReceivedBtDataEntity>> getLatestForSensorsInList(List<String> sensorIds);
+
+    /**
      * Get the latest reading for a specific owner and sensor combination.
      * Used when supervisor wants to see a specific person from a specific aggregator.
      */

@@ -45,6 +45,10 @@ public class GlobalData extends Application {
     public String currentUserRole = null; // "aggregator" or "supervisor"
     public String currentUserUid = null;
     public java.util.List<String> supervisedSensorIds = new java.util.ArrayList<>();
+    
+    // LiveData for reactive session data (ViewModels observe these to react to async updates)
+    private final MutableLiveData<java.util.List<String>> supervisedSensorIdsLiveData = new MutableLiveData<>(new java.util.ArrayList<>());
+    private final MutableLiveData<String> currentUserUidLiveData = new MutableLiveData<>(null);
 
     public MutableLiveData<Boolean> getIsConnectedDevice() {
         return isConnectedDevice;
@@ -61,10 +65,18 @@ public class GlobalData extends Application {
     }
     
     /**
-     * Set current user UID
+     * Set current user UID (also updates LiveData for reactive observers)
      */
     public void setCurrentUserUid(String uid) {
         this.currentUserUid = uid;
+        this.currentUserUidLiveData.postValue(uid);
+    }
+    
+    /**
+     * Get current user UID as LiveData (reactive - updates when UID changes)
+     */
+    public LiveData<String> getCurrentUserUidLive() {
+        return currentUserUidLiveData;
     }
     
     /**
@@ -75,10 +87,18 @@ public class GlobalData extends Application {
     }
     
     /**
-     * Set supervised sensor IDs (for supervisor users)
+     * Set supervised sensor IDs (also updates LiveData for reactive observers)
      */
     public void setSupervisedSensorIds(java.util.List<String> sensorIds) {
         this.supervisedSensorIds = sensorIds != null ? new java.util.ArrayList<>(sensorIds) : new java.util.ArrayList<>();
+        this.supervisedSensorIdsLiveData.postValue(this.supervisedSensorIds);
+    }
+    
+    /**
+     * Get supervised sensor IDs as LiveData (reactive - updates when list changes)
+     */
+    public LiveData<java.util.List<String>> getSupervisedSensorIdsLive() {
+        return supervisedSensorIdsLiveData;
     }
     
     /**
@@ -93,6 +113,10 @@ public class GlobalData extends Application {
         // Reset LiveData to neutral state
         receivedPosture.postValue(null);
         isConnectedDevice.postValue(false);
+        
+        // Reset session LiveData (triggers ViewModel updates)
+        supervisedSensorIdsLiveData.postValue(new java.util.ArrayList<>());
+        currentUserUidLiveData.postValue(null);
     }
     
     public String userName = "Popescu Mihaita";
