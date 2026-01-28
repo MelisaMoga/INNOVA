@@ -86,7 +86,7 @@
         <activity
             android:name="com.melisa.innovamotionapp._login.login.LoginActivity"
             android:exported="true"
-            android:label="@string/title_activity_login"
+            android:label="@string/app_name_short"
             android:theme="@style/Theme.InnovaMotionApp">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />

@@ -1,5 +1,6 @@
 <resources>
-    <string name="app_name">InnovaMotionApp</string>
+    <string name="app_name">InnovaMotion</string>
+    <string name="app_name_short">IMotion</string>
     <!-- Strings used for fragments for navigation -->
     <string name="first_fragment_label">First Fragment</string>
     <string name="second_fragment_label">Second Fragment</string>
